@@ -1,0 +1,26 @@
+Name:                sloth2d
+Version:             0.1.0
+Synopsis:            A purely functional 2D physics engine.
+Description:         A purely functional 2D physics engine presented through composable high-level abstractions.
+Homepage:            https://github.com/cobbpg/sloth2d
+License:             BSD3
+License-file:        LICENSE
+Author:              Patai Gergely
+Maintainer:          Patai Gergely (patai.gergely@gmail.com)
+Stability:           Experimental
+Category:            Physics
+Build-type:          Simple
+
+Extra-source-files:
+  README.md
+
+Cabal-version:       >=1.2
+
+Library
+  Exposed-modules:
+    Physics.Sloth2D.Geometry2D
+    Physics.Sloth2D.Vector2D
+    Physics.Sloth2D.Body
+
+  Build-depends: base >= 4, vector, vector-algorithms
+  Ghc-options:         -Wall -O2
