@@ -54,9 +54,10 @@ body `withShape` s = body { shape = s, shapeEdges = es, shapeAngles = as }
 withMass :: Body -> Float -> Body
 body `withMass` m = case abs m of
     0 -> body { mass = 0, mass' = 0, angMass = 0, angMass' = 0 }
-    m -> body { mass = m, mass' = recip m, angMass = r*m, angMass' = recip (r*m) }
+    m -> body { mass = m, mass' = recip m, angMass = r*m, angMass' = am' }
   where
     r = angMassRatio body
+    am' = if r == 0 then 0 else recip (r*m)
 
 withTrans :: Body -> T2 -> Body
 body `withTrans` t = body { trans = t, tshape = ts, tshapeEdges = tse, tshapeAngles = tsa }

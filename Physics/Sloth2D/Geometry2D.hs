@@ -67,7 +67,9 @@ centroid vs
   where
     gen v1 v2 = let c = v1 `cross` v2 in (c,(v1+v2)*.c)
     accum (!c1,!v1) (c2,v2) = (c1+c2,v1+v2)
-    divsum (c,v) = v*.(recip (3*c))
+    divsum (c,v)
+        | c /= 0    = v*.(recip (3*c))
+        | otherwise = (V.minimum vs+V.maximum vs)*.0.5
 
 -- | The moment of inertia of a simple polygon with respect to the origin.
 moment :: Vector V2 -> Float
@@ -77,7 +79,9 @@ moment vs
   where
     gen v1 v2 = let c = v2 `cross` v1 in (c,(v1 `dot` (v1+v2) + square v2)*c)
     accum (!s1,!s2) (p1,p2) = (s1+p1,s2+p2)
-    divsum (s1,s2) = s2/(6*s1)
+    divsum (s1,s2)
+        | s1 /= 0   = s2/(6*s1)
+        | otherwise = 0
 
 -- | The convex hull of a collection of vertices in counter-clockwise
 -- order. (Andrew's Monotone Chain Algorithm)
