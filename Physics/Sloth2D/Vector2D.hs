@@ -5,21 +5,16 @@ module Physics.Sloth2D.Vector2D
     , (*.), dot, cross, perpL, perpR
     , turn, turnL, turnNL, turnR, turnNR, parv
     , square, mag, norm, dir
-    , (<>)
-    , translate, scale, rotate
-    , translationOf, scaleOf, rotationOf
+    , inverse, (<>)
+    , translate, rotate, scale
+    , translationOf, rotationOf, scaleOf
+    , withTranslation, withRotation, withScale
     ) where
 
 import Data.Monoid
 
-infixl 7 `dot`
-infixl 7 `cross`
-infixl 5 `turn`
-infixl 5 `turnL`
-infixl 5 `turnNL`
-infixl 5 `turnR`
-infixl 5 `turnNR`
-infixl 5 `parv`
+infixl 7 `dot`, `cross`
+infixl 5 `turn`, `turnL`, `turnNL`, `turnR`, `turnNR`, `parv`
 
 -- | An angle is a number between -pi and pi.
 type Angle = Float
@@ -35,6 +30,7 @@ data T2 = T
     {-# UNPACK #-} !Float {-# UNPACK #-} !Float
     {-# UNPACK #-} !Float {-# UNPACK #-} !Float
     {-# UNPACK #-} !Float {-# UNPACK #-} !Float
+    deriving Show
 
 instance Num V2 where
     V x1 y1 + V x2 y2 = V (x1+x2) (y1+y2)
@@ -111,29 +107,33 @@ norm v@(V x y) = V (x*m) (y*m)
 
 instance Monoid T2 where
     mempty = scale 1
-    T t11 t12 t21 t22 tx ty `mappend` T u11 u12 u21 u22 ux uy = T v11 v12 v21 v22 vx vy
+    T a1 b1 c1 d1 tx1 ty1 `mappend` T a2 b2 c2 d2 tx2 ty2 = T a b c d tx ty
       where
-        v11 = t11*u11+t12*u21
-        v12 = t11*u12+t12*u22
-        v21 = t21*u11+t22*u21
-        v22 = t21*u12+t22*u22
-        vx = t11*ux+t12*uy+tx
-        vy = t21*ux+t22*uy+ty
+        a = a1*a2+b1*c2
+        b = a1*b2+b1*d2
+        c = c1*a2+d1*c2
+        d = c1*b2+d1*d2
+        tx = a1*tx2+b1*ty2+tx1
+        ty = c1*tx2+d1*ty2+ty1
+
+-- | Inverse transformation
+inverse :: T2 -> T2
+inverse (T a b c d tx ty) = T (d*m) (-b*m) (-c*m) (a*m) tx' ty'
+  where
+    m = recip (a*d-b*c)
+    tx' = m*(b*ty-d*tx)
+    ty' = m*(c*tx-a*ty)
 
 -- | Transformation applied to a vector.
 (<>) :: T2 -> V2 -> V2
-T t11 t12 t21 t22 tx ty <> V x y = V x' y'
+T a b c d tx ty <> V x y = V x' y'
   where
-    x' = t11*x+t12*y+tx
-    y' = t21*x+t22*y+ty
+    x' = a*x+b*y+tx
+    y' = c*x+d*y+ty
 
 -- | Transformation representing a translation.
 translate :: V2 -> T2
 translate (V x y) = T 1 0 0 1 x y
-
--- | Transformation representing a scaling.
-scale :: Float -> T2
-scale m = T m 0 0 m 0 0
 
 -- | Transformation representing a rotation.
 rotate :: Angle -> T2
@@ -141,6 +141,10 @@ rotate a = T ca (-sa) sa ca 0 0
   where
     sa = sin a
     ca = cos a
+
+-- | Transformation representing a scaling.
+scale :: Float -> T2
+scale m = T m 0 0 m 0 0
 
 -- | The translation factor of a transformation.
 translationOf :: T2 -> V2
@@ -152,4 +156,20 @@ rotationOf (T x _ y _ _ _) = dir (V x y)
 
 -- | The scaling factor of a transformation.
 scaleOf :: T2 -> Float
-scaleOf (T x _ y _ _ _) = mag (V x y)
+scaleOf (T a b c d _ _) = sqrt (a*d-b*c)
+
+-- | Replacing the translation factor of a transformation.
+withTranslation :: T2 -> V2 -> T2
+T a b c d _ _ `withTranslation` V x y = T a b c d x y
+
+-- | Replacing the rotation factor of a transformation.
+withRotation :: T2 -> Angle -> T2
+t `withRotation` a = t `mappend` rotate (a-rotationOf t)
+
+-- | Replacing the scaling factor of a transformation.
+withScale :: T2 -> Float -> T2
+t `withScale` m = t `mappend` scale m'
+  where
+    m' = case scaleOf t of
+        0 -> 0
+        m'' -> m/m''

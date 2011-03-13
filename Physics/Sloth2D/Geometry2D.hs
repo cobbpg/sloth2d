@@ -22,7 +22,7 @@ data Vertex = Vtx
     , py :: Float
     } deriving Show
 
-type MonotoneSegment = ([Vertex],[Vertex])
+type MonotoneSegment = ([Int],[Int])
 
 -- | Checking whether an angle is within a given interval.
 between :: Angle -> (Angle,Angle) -> Bool
@@ -105,8 +105,8 @@ convexHull vs = case compare (V.length vs) 2 of
     addVertex v (v1:vs@(v2:_)) | v1-v2 `turnNR` v-v1 = addVertex v vs
     addVertex v vs = v:vs
 
--- | Monotone decomposition of a simple polygon
-monotoneDecomposition :: Vector V2 -> [([Int],[Int])]
+-- | Monotone decomposition of a simple polygon.
+monotoneDecomposition :: Vector V2 -> [MonotoneSegment]
 monotoneDecomposition vs = (map getIndices . snd) (V.foldl' addVertex ([], []) scvs)
   where
     cw = area vs < 0
@@ -160,17 +160,13 @@ monotoneDecomposition vs = (map getIndices . snd) (V.foldl' addVertex ([], []) s
       where
         vty = case (compare y1 y0, compare y1 y2, v2-v1 `turn` v1-v0) of
           (LT, LT, LT) -> BottomCap
-          --(LT, EQ, LT) -> BottomCap
           (EQ, LT, LT) -> BottomCap
           (LT, LT, GT) -> TopCap
           (LT, EQ, GT) -> TopCap
-          --(EQ, LT, GT) -> TopCap
           (GT, GT, GT) -> BottomCup
-          --(GT, EQ, GT) -> BottomCup
           (EQ, GT, GT) -> BottomCup
           (GT, GT, LT) -> TopCup
           (GT, EQ, LT) -> TopCup
-          --(EQ, GT, LT) -> TopCup
           _            -> Side
         i0 = if i1 == 0 then V.length ovs - 1 else i1-1
         i2 = if i1 == V.length ovs - 1 then 0 else i1+1
@@ -178,7 +174,7 @@ monotoneDecomposition vs = (map getIndices . snd) (V.foldl' addVertex ([], []) s
         v2@(V x2 y2) = ovs ! i2
 
 -- | Triangulation of a monotone polygon.
-monotoneTriangulation :: Vector V2 -> ([Int],[Int]) -> [(Int,Int,Int)]
+monotoneTriangulation :: Vector V2 -> MonotoneSegment -> [(Int,Int,Int)]
 monotoneTriangulation vs (msl,msr) = snd (foldl' addVertex ([si2,si1],[]) sis)
   where
     addVertex (si@(s,i):sis,ts) si'@(s',i')
@@ -212,6 +208,10 @@ monotoneTriangulation vs (msl,msr) = snd (foldl' addVertex ([si2,si1],[]) sis)
         V _ y1 = vs ! il
         V _ y2 = vs ! ir
 
+-- | Triangulation of a simple polygon.
+triangulation :: Vector V2 -> [(Int, Int, Int)]
+triangulation vs = [tri | ms <- monotoneDecomposition vs, tri <- monotoneTriangulation vs ms]
+
 -- | A triple @(d2,ds,fs)@ that describes the closest opposing
 -- features (only edge-vertex pairs) of two convex polygons, where
 -- @d2@ is the square of the distance, @ds@ is its sign (negative in
@@ -223,13 +223,13 @@ monotoneTriangulation vs (msl,msr) = snd (foldl' addVertex ([si2,si1],[]) sis)
 -- (@v2@ always equals the vertex), and the boolean @b@ specifies
 -- whether the edge belongs to the first polygon (@True@) or the
 -- second (@False@).
-separations :: Vector V2    -- ^ The vertices of the first polygon (vs1)
-            -> Vector Angle -- ^ Must equal @angles vs1@
-            -> Vector V2    -- ^ The vertices of the second polygon (vs2)
-            -> Vector Angle -- ^ Must equal @angles vs2@
-            -> (Float,Float,[(Bool,Int,Int,V2,V2)])
-separations vs1 as1 vs2 as2 = (d2min,dsmin,
-                               map finaliseDist (filter ((==dmin) . getDist) cs))
+convexSeparations :: Vector V2    -- ^ The vertices of the first polygon (vs1)
+                  -> Vector Angle -- ^ Must equal @angles vs1@
+                  -> Vector V2    -- ^ The vertices of the second polygon (vs2)
+                  -> Vector Angle -- ^ Must equal @angles vs2@
+                  -> (Float,Float,[(Bool,Int,Int,V2,V2)])
+convexSeparations vs1 as1 vs2 as2 = (d2min,dsmin,
+                                     map finaliseDist (filter ((==dmin) . getDist) cs))
   where
     cs = [(s,ei1,vi2,v1,v2,ds,d2) |
           (s,cs) <- [(True,evcs vs1 as1 vs2 as2),(False,evcs vs2 as2 vs1 as1)],
@@ -277,13 +277,3 @@ separations vs1 as1 vs2 as2 = (d2min,dsmin,
             (v,d2) = if dp <= 0 then (v1,square v13)
                      else if dp >= sd12 then (v2,square v23)
                           else (v1+v12*.(dp*sd12'),cp*cp*sd12')
-
-{-
-test = separations test1 (angles test1) test2 (angles test2)
-
-test1 = V.fromList [V 0 0,V 50 0,V 70 20,V 90 50,V 100 100,V 0 100]
-
-test2 = V.map (translate (V 0 (-60)) <>) $ V.fromList [V 0 0,V 200 0,V 100 100]
-
-test3 = V.fromList [V 0 0,V 0.5 0.5,V 1 0,V 1 1,V 0 1]
--}
