@@ -21,11 +21,11 @@ data Body = Body
     , angVelocity :: Float
     , curVertices :: Vector V2
     , curAngles :: Vector Float
-    }
+    } deriving Show
 
 fromShape :: Shape -> Body
-fromShape s = Body
-    { shape = s
+fromShape shape = Body
+    { shape = shape
     , edgeAngles = as
     , mass = 0
     , invMass = 0
@@ -39,7 +39,7 @@ fromShape s = Body
     , curAngles = as
     }
   where
-    vs = vertices s
+    vs = vertices shape
     as = angles vs
 
 withMass :: Body -> Float -> Body
@@ -50,26 +50,25 @@ body `withMass` mass = case abs mass of
     am = mass * momentOfInertia (shape body)
     am' = if am == 0 then 0 else recip am
 
+withPosition :: Body -> (V2, Angle) -> Body
+body `withPosition` (p,a) =
+    body { position = p, angPosition = a
+         , curVertices = vs, curAngles = as
+         }
+  where
+    t = rotate a `withTranslation` p
+    vs = V.map (t <>) (vertices (shape body))
+    as = V.map (a +<) (edgeAngles body)
+
+withVelocity :: Body -> (V2, Float) -> Body
+body `withVelocity` (v,w) = body { velocity = v, angVelocity = w }
+
+withShape :: Body -> Shape -> Body
+body `withShape` shape =
+    fromShape shape
+    `withMass` mass body
+    `withPosition` (position body, angPosition body)
+    `withVelocity` (velocity body, angVelocity body)
+
 transformation :: Body -> T2
-transformation Body { position = p, angPosition = a } = translate p `mappend` rotate a
-
-{-
-withShape :: Body -> Vector V2 -> Body
-body `withShape` s = body { shapeOf = s, shapeEdges = es, shapeAngles = as, momentRatio = r }
-                     `withTrans` transOf body `withMass` massOf body
-  where
-    es = V.map norm (edges s)
-    as = angles s
-    r = moment s * (scaleOf (transOf body))^2
-
-withTrans :: Body -> T2 -> Body
-body `withTrans` t = body { transOf = t, tshapeOf = ts, tshapeEdges = tse, tshapeAngles = tsa }
-  where
-    r = rotationOf t
-    ts = V.map (t <>) (shapeOf body)
-    -- Note: below we assume that the transformation preserves angles!
-    -- This is ensured by the interface exposed in the Vector2D
-    -- module.
-    tse = V.map (rotate r <>) (shapeEdges body)
-    tsa = V.map (r +<) (shapeAngles body)
--}
+transformation Body { position = p, angPosition = a } = rotate a `withTranslation` p

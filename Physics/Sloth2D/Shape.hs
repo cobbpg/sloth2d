@@ -28,7 +28,7 @@ polygonShape vs = Shape vs' (moment vs') a r
     c = centroid vs
     vs' = (if area vs > 0 then id else V.reverse) (V.map (subtract c) vs)
     a = abs (area vs)
-    r = V.maximum (V.map square vs')
+    r = if V.null vs then 0 else V.maximum (V.map square vs')
 
 -- | A shape derived from the convex hull of a collection of vertices.
 convexHullShape :: Vector V2 -> Shape
