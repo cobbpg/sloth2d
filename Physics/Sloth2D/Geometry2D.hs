@@ -30,6 +30,8 @@ a `between` (a1,a2)
     | a1 <= a2  = a >= a1 && a <= a2
     | otherwise = a >= a1 || a <= a2
 
+infixl 6 +<
+
 -- | The sum of two angles.
 (+<) :: Angle -> Angle -> Angle
 a1 +< a2 = if a < -pi then a+2*pi
@@ -37,6 +39,10 @@ a1 +< a2 = if a < -pi then a+2*pi
                 else a
   where
     a = a1+a2
+
+-- | Linear interpolation between two angles along the smaller arc.
+alerp :: Angle -> Angle -> Float -> Angle
+alerp a1 a2 t = a1+<(a2+<(-a1))*t
 
 -- | Applying a binary function to consecutive pairs in a vector with
 -- wrap-around.
