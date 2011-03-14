@@ -22,6 +22,7 @@ Library
     Physics.Sloth2D.Geometry2D
     Physics.Sloth2D.Vector2D
     Physics.Sloth2D.Shape
+    Physics.Sloth2D.Stepper
 
-  Build-depends: base >= 4, vector, vector-algorithms
-  Ghc-options:         -Wall -O2
+  Build-depends:     base >= 4, vector, vector-algorithms
+  Ghc-options:       -Wall -O2
