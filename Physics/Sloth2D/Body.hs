@@ -49,13 +49,17 @@ body `withMass` mass = body { masses = (m,m',am,am') }
               else (recip m, m * momentOfInertia (shape body))
     am' = if am == 0 then 0 else recip am
 
-withPosition :: Body -> (V2, Angle) -> Body
-body@Body { curState = Dyn _ v _ w } `withPosition` (p,a) =
-    body { curState = Dyn p v a w, curGeometry = (vs,as) }
+withState :: Body -> DynamicState -> Body
+body `withState` st@(Dyn p _ a _) =
+    body { curState = st, curGeometry = (vs,as) }
   where
-    t = rotate a `withTranslation` p
+    t = transRot p a
     vs = V.map (t <>) (vertices (shape body))
     as = V.map (a +<) (edgeAngles body)
+
+withPosition :: Body -> (V2, Angle) -> Body
+body@Body { curState = Dyn _ v _ w } `withPosition` (p,a) =
+    body `withState` Dyn p v a w
 
 withVelocity :: Body -> (V2, Float) -> Body
 body@Body { curState = Dyn p _ a _ } `withVelocity` (v,w) =
@@ -81,7 +85,7 @@ invAngMass :: Body -> Float
 invAngMass Body { masses = (_,_,_,m) } = m
 
 curTransformation :: Body -> T2
-curTransformation Body { curState = Dyn p _ a _ } = rotate a `withTranslation` p
+curTransformation Body { curState = Dyn p _ a _ } = transRot p a
 
 curP :: Body -> V2
 curP Body { curState = Dyn p _ _ _ } = p
@@ -95,8 +99,23 @@ curA Body { curState = Dyn _ _ a _ } = a
 curW :: Body -> Float
 curW Body { curState = Dyn _ _ _ w } = w
 
-transformation :: Float -> Body -> T2
-transformation t body = rotate (orientation t body) `withTranslation` position t body
+curT :: Body -> T2
+curT Body { curState = Dyn p _ a _ } = transRot p a
+
+prevP :: Body -> V2
+prevP Body { prevState = Dyn p _ _ _ } = p
+
+prevV :: Body -> V2
+prevV Body { prevState = Dyn _ v _ _ } = v
+
+prevA :: Body -> Angle
+prevA Body { prevState = Dyn _ _ a _ } = a
+
+prevW :: Body -> Float
+prevW Body { prevState = Dyn _ _ _ w } = w
+
+prevT :: Body -> T2
+prevT Body { prevState = Dyn p _ a _ } = transRot p a
 
 position :: Float -> Body -> V2
 position t Body { curState = Dyn p _ _ _, prevState = Dyn p' _ _ _ } = p*.t+p'*.(1-t)
@@ -109,3 +128,37 @@ velocity t Body { curState = Dyn _ v _ _, prevState = Dyn _ v' _ _ } = v*.t+v'*.
 
 angularVelocity :: Float -> Body -> Float
 angularVelocity t Body { curState = Dyn _ _ _ w, prevState = Dyn _ _ _ w' } = w*t+w'*(1-t)
+
+transformation :: Float -> Body -> T2
+transformation t body = transRot (position t body) (orientation t body)
+
+collisionResponse :: Float -> Body -> Body -> [(V2, Float, V2, Float)]
+collisionResponse eps b1 b2 = imps
+  where
+    Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 a1 w1, curGeometry = (vs1,as1) } = b1
+    Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 a2 w2, curGeometry = (vs2,as2) } = b2
+    t1 = curT b1
+    t2 = curT b2
+    tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^2
+    (d2,ds,fs) = convexSeparations vs1 as1 vs2 as2
+    fsl = recip (fromIntegral (length fs))
+    imps = if tooFar || ds > 0 then [] else [mkImp b r1 r2 | (b,_,_,r1,r2) <- fs]
+    mkImp False r1 r2 = mkImp True r2 r1
+    mkImp True r1 r2 = (j*.(-m1'), -i1'*(ra `cross` j), j*.m2', i2'*(rb `cross` j))
+      where
+        ra = r1-p1
+        rb = r2-p2
+        j = (v1+perpL ra*.w1-v2-perpL rb*.w2)*.
+            (fsl*(1+eps)/(m1'+m2'+i1'*square ra+i2'*square rb))
+
+transRot :: V2 -> Angle -> T2
+transRot v a = rotate a `withTranslation` v
+
+{-
+
+1. Collision detection and modeling. - eps = 1
+2. Advance the velocities using equation 2.
+3. Contact resolution. - eps = 0
+4. Advance the positions using equation 1.
+
+-}
