@@ -1,5 +1,6 @@
 module Physics.Sloth2D.Body where
 
+import Data.List
 import Data.Monoid
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -132,8 +133,9 @@ angularVelocity t Body { curState = Dyn _ _ _ w, prevState = Dyn _ _ _ w' } = w*
 transformation :: Float -> Body -> T2
 transformation t body = transRot (position t body) (orientation t body)
 
-collisionResponse :: Float -> Body -> Body -> [(V2, Float, V2, Float)]
-collisionResponse eps b1 b2 = imps
+collisionResponse :: Float -> Body -> Body -> Maybe (V2, Float, V2, Float)
+collisionResponse eps b1 b2 = if null imps then Nothing
+                              else Just (mulMasses (foldl1' addImp imps))
   where
     Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 a1 w1, curGeometry = (vs1,as1) } = b1
     Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 a2 w2, curGeometry = (vs2,as2) } = b2
@@ -144,12 +146,15 @@ collisionResponse eps b1 b2 = imps
     fsl = recip (fromIntegral (length fs))
     imps = if tooFar || ds > 0 then [] else [mkImp b r1 r2 | (b,_,_,r1,r2) <- fs]
     mkImp False r1 r2 = mkImp True r2 r1
-    mkImp True r1 r2 = (j*.(-m1'), -i1'*(ra `cross` j), j*.m2', i2'*(rb `cross` j))
+    mkImp True r1 r2 = (j, ra `cross` j, rb `cross` j)
       where
         ra = r1-p1
         rb = r2-p2
-        j = (v1+perpL ra*.w1-v2-perpL rb*.w2)*.
-            (fsl*(1+eps)/(m1'+m2'+i1'*square ra+i2'*square rb))
+        vab = v1+perpL ra*.w1-v2-perpL rb*.w2
+        j = if (r1-r2) `dot` vab < 0 then V 0 0
+            else vab*.(fsl*(1+eps)/(m1'+m2'+i1'*square ra+i2'*square rb))
+    addImp (j1,ta1,tb1) (j2,ta2,tb2) = (j1+j2,ta1+ta2,tb1+tb2)
+    mulMasses (j,ta,tb) = (j*.(-m1'),-ta*i1',j*.m2',tb*i2')
 
 transRot :: V2 -> Angle -> T2
 transRot v a = rotate a `withTranslation` v

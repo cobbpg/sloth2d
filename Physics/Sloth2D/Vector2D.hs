@@ -2,7 +2,7 @@ module Physics.Sloth2D.Vector2D
     ( Angle
     , V2(..)
     , T2
-    , (*.), dot, cross, perpL, perpR
+    , unit, (*.), dot, cross, perpL, perpR
     , turn, turnL, turnNL, turnR, turnNR, parv
     , square, mag, norm, dir
     , inverse, (<>)
@@ -40,6 +40,10 @@ instance Num V2 where
     abs (V x y) = V (abs x) (abs y)
     signum (V x y) = V (signum x) (signum y)
     fromInteger n = let n' = fromInteger n in V n' n'
+
+-- | Unit vector with the given direction.
+unit :: Angle -> V2
+unit a = V (cos a) (sin a)
 
 -- | Multiplication with a scalar.
 (*.) :: V2 -> Float -> V2
