@@ -27,6 +27,12 @@ data Body = Body
 shiftBody :: Body -> Body
 shiftBody body = body { prevState = curState body, prevGeometry = curGeometry body }
 
+integrate :: Float -> Body -> Body
+integrate dt body@(Body { curState = Dyn p v a w }) = body `withPosition` (p',a')
+  where
+    p' = p+v*.dt
+    a' = a+w*dt
+
 fromShape :: Shape -> Body
 fromShape shape = Body
     { shape = shape
@@ -72,6 +78,14 @@ body `withShape` shape =
     `withMass` mass body
     `withPosition` (curP body, curA body)
     `withVelocity` (curV body, curW body)
+
+movedBy :: Body -> (V2, Angle) -> Body
+body@Body { curState = Dyn p v a w } `movedBy` (p',a') =
+    body `withState` Dyn (p+p') v (a+<a') w
+
+nudgedBy :: Body -> (V2, Float) -> Body
+body@Body { curState = Dyn p v a w } `nudgedBy` (v',w') =
+    body { curState = Dyn p (v+v') a (w+w') }
 
 mass :: Body -> Float
 mass Body { masses = (m,_,_,_) } = m
@@ -158,12 +172,3 @@ collisionResponse eps b1 b2 = if null imps then Nothing
 
 transRot :: V2 -> Angle -> T2
 transRot v a = rotate a `withTranslation` v
-
-{-
-
-1. Collision detection and modeling. - eps = 1
-2. Advance the velocities using equation 2.
-3. Contact resolution. - eps = 0
-4. Advance the positions using equation 1.
-
--}

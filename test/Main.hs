@@ -94,17 +94,12 @@ regularShape n s = polygonShape (V.generate n f)
   where
     f i = unit (2*pi*fromIntegral i/fromIntegral n) *. s
 
-advance dt bodies = V.toList (V.map integrate collbs)
+advance dt bodies = V.toList (V.map (integrate dt) collbs)
   where
     num = length bodies - 1
     bs = V.map shiftBody (V.fromList bodies)
-    collbs = V.accum addResp bs $ concat [check i1 i2 | i1 <- [0..num], i2 <- [i1+1..num]]
+    collbs = V.accum nudgedBy bs [r | i1 <- [0..num], i2 <- [i1+1..num], r <- check i1 i2]
       where
-        addResp body (dv,dw) = body `withVelocity` (dv+curV body,dw+<curW body)
         check i1 i2 = case collisionResponse 1 (bs ! i1) (bs ! i2) of
             Nothing -> []
             Just (v1,w1,v2,w2) -> [(i1,(v1,w1)),(i2,(v2,w2))]
-    integrate body@(Body { curState = Dyn p v a w }) = body `withPosition` (p',a')
-      where
-        p' = p+v*.dt
-        a' = a+w*dt
