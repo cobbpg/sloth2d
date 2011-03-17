@@ -16,20 +16,21 @@ import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 
 bodies =
-    [ fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V 12 0, 0)
-    , fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V (-12) 0, pi)
-    , fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V 0 10, pi*0.5)
-    , fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V 0 (-10), pi*1.5)
-    , fromShape (regularShape 3 1) `withMass` 1 `withPosition` (V 0.5 0, 0) `withVelocity` (V 0.5 0.1, 0)
-    , fromShape (regularShape 4 1) `withMass` 2 `withPosition` (V (-2) 0, pi/8) `withVelocity` (V 1 0, 0)
-    , fromShape (regularShape 5 1) `withMass` 3 `withPosition` (V 2 (-1), 0) `withVelocity` (V 0 0, 1)
-    ] ++
-    [fromShape (regularShape 7 0.3) `withMass` 0.1 `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(-0.5), 0) |
+    [ fromShape (regularShape 3 10) `withPosition` (V 12 0, 0)
+    , fromShape (regularShape 3 10) `withPosition` (V (-12) 0, pi)
+    , fromShape (regularShape 3 10) `withPosition` (V 0 10, pi*0.5)
+    , fromShape (regularShape 3 10) `withPosition` (V 0 (-10), pi*1.5)
+    , fromShape (regularShape 4 1) `withMass` 1 `withPosition` (V 0.5 0, 0) `withVelocity` (V 3 1, 0)
+    , fromShape (regularShape 5 1) `withMass` 2 `withPosition` (V (-2) 0, pi/8) `withVelocity` (V 2 3, 0)
+    , fromShape (regularShape 6 1) `withMass` 3 `withPosition` (V 2 (-1), 0) `withVelocity` (V 4 0, 1)
+    ]
+    ++
+    [fromShape (regularShape 3 0.4) `withMass` 0.3 `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(1.5), 0) |
      a <- [0,pi*0.1..pi*1.9]]
 
 main = do
     initialize
-    openWindow (Size 640 480) [DisplayRGBBits 8 8 8, DisplayAlphaBits 8, DisplayDepthBits 24] Window
+    openWindow (Size 800 600) [DisplayRGBBits 8 8 8, DisplayAlphaBits 8, DisplayDepthBits 24] Window
     windowTitle $= "Sloth2D test"
     closed <- newIORef False
     windowCloseCallback $= writeIORef closed True

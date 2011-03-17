@@ -29,10 +29,7 @@ shiftBody :: Body -> Body
 shiftBody body = body { prevState = curState body, prevGeometry = curGeometry body }
 
 integrate :: Float -> Body -> Body
-integrate dt body@(Body { curState = Dyn p v a w }) = body `withPosition` (p',a')
-  where
-    p' = p+v*.dt
-    a' = a+w*dt
+integrate dt body = body `movedBy` (curV body*.dt, curW body*dt)
 
 fromShape :: Shape -> Body
 fromShape shape = Body
@@ -77,8 +74,7 @@ withShape :: Body -> Shape -> Body
 body `withShape` shape =
     fromShape shape
     `withMass` mass body
-    `withPosition` (curP body, curA body)
-    `withVelocity` (curV body, curW body)
+    `withState` curState body
 
 movedBy :: Body -> (V2, Angle) -> Body
 body@Body { curState = Dyn p v a w } `movedBy` (p',a') =
@@ -154,8 +150,6 @@ collisionResponse eps b1 b2 = if null imps then Nothing
   where
     Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 a1 w1, curGeometry = (vs1,as1) } = b1
     Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 a2 w2, curGeometry = (vs2,as2) } = b2
-    t1 = curT b1
-    t2 = curT b2
     tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^2
     (d2,ds,fs) = convexSeparations vs1 as1 vs2 as2
     imps = if tooFar || ds > 0 || (m1' == 0 && m2' == 0) then []
