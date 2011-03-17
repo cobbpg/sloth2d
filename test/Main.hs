@@ -16,10 +16,16 @@ import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 
 bodies =
-    [ fromShape (regularShape 3 1) `withMass` 1 `withPosition` (V 0.5 2, 0) `withVelocity` (V 0.5 0.1, 0)
-    , fromShape (regularShape 4 1) `withMass` 2 `withPosition` (V (-2) 2, pi/8) `withVelocity` (V 1 0, 0)
-    , fromShape (regularShape 5 1) `withMass` 3 `withPosition` (V 2 1, 0) `withVelocity` (V 0 0, 1)
-    ]
+    [ fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V 12 0, 0)
+    , fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V (-12) 0, pi)
+    , fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V 0 10, pi*0.5)
+    , fromShape (regularShape 3 10) `withMass` 0 `withPosition` (V 0 (-10), pi*1.5)
+    , fromShape (regularShape 3 1) `withMass` 1 `withPosition` (V 0.5 0, 0) `withVelocity` (V 0.5 0.1, 0)
+    , fromShape (regularShape 4 1) `withMass` 2 `withPosition` (V (-2) 0, pi/8) `withVelocity` (V 1 0, 0)
+    , fromShape (regularShape 5 1) `withMass` 3 `withPosition` (V 2 (-1), 0) `withVelocity` (V 0 0, 1)
+    ] ++
+    [fromShape (regularShape 7 0.3) `withMass` 0.1 `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(-0.5), 0) |
+     a <- [0,pi*0.1..pi*1.9]]
 
 main = do
     initialize
@@ -37,7 +43,7 @@ main = do
         matrixMode $= Projection
         loadIdentity
         GL.scale (s*min 1 r) (s*min 1 r') (1 :: GLfloat)
-        GL.translate $ Vector3 0 (-0.5*lr) (0 :: GLfloat)
+        --GL.translate $ Vector3 0 (-0.5*lr) (0 :: GLfloat)
 
     bodyLists <- forM bodies $ \body -> do
         let sh = shape body
@@ -53,6 +59,8 @@ main = do
                 vertex $ Vertex3 (realToFrac x2) (realToFrac y2) (0 :: GLfloat)
                 vertex $ Vertex3 (realToFrac x3) (realToFrac y3) (0 :: GLfloat)
 
+    blend $= Enabled
+    blendFunc $= (SrcAlpha,OneMinusSrcAlpha)
     flip fix bodies $ \loop bodies -> do
         render bodies bodyLists
         sleep 0.02
@@ -65,19 +73,19 @@ main = do
 render bodies lists = do
     clear [ColorBuffer]
 
-    let magn = recip 10
+    let magn = recip 15
     matrixMode $= Modelview 0
     loadIdentity
     GL.scale magn magn (1 :: GLfloat)
 
-    color $ Color4 1 1 1 (1 :: GLfloat)
+    color $ Color4 1 1 1 (0.5 :: GLfloat)
     forM_ (zip bodies lists) $ \(body,list) -> preservingMatrix $ do
         let V x y = curP body
             a = curA body
         GL.translate $ Vector3 (realToFrac x) (realToFrac y) (0 :: GLfloat)
         GL.rotate (realToFrac (a*180/pi) :: GLfloat) $ Vector3 0 0 1
         callList list
-
+{-
     forM_ [(b,b') | (b:bs) <- tails bodies, b' <- bs] $ \(b1,b2) -> do
         let (vs1,as1) = curGeometry b1
             (vs2,as2) = curGeometry b2
@@ -86,7 +94,7 @@ render bodies lists = do
         renderPrimitive Lines $ forM_ fs $ \(_,_,_,V x1 y1,V x2 y2) -> do
             vertex $ Vertex3 (realToFrac x1) (realToFrac y1) (0 :: GLfloat)
             vertex $ Vertex3 (realToFrac x2) (realToFrac y2) (0 :: GLfloat)
-
+-}
     flush
     swapBuffers
 
@@ -96,8 +104,8 @@ regularShape n s = polygonShape (V.generate n f)
 
 advance dt bodies = V.toList (V.map (integrate dt) collbs)
   where
-    num = length bodies - 1
     bs = V.map shiftBody (V.fromList bodies)
+    num = V.length bs - 1
     collbs = V.accum nudgedBy bs [r | i1 <- [0..num], i2 <- [i1+1..num], r <- check i1 i2]
       where
         check i1 i2 = case collisionResponse 1 (bs ! i1) (bs ! i2) of

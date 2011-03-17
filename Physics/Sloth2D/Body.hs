@@ -1,6 +1,7 @@
 module Physics.Sloth2D.Body where
 
 import Data.List
+import Data.Maybe
 import Data.Monoid
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -157,18 +158,20 @@ collisionResponse eps b1 b2 = if null imps then Nothing
     t2 = curT b2
     tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^2
     (d2,ds,fs) = convexSeparations vs1 as1 vs2 as2
-    fsl = recip (fromIntegral (length fs))
-    imps = if tooFar || ds > 0 then [] else [mkImp b r1 r2 | (b,_,_,r1,r2) <- fs]
+    imps = if tooFar || ds > 0 || (m1' == 0 && m2' == 0) then []
+           else catMaybes [mkImp b r1 r2 | (b,_,_,r1,r2) <- fs]
     mkImp False r1 r2 = mkImp True r2 r1
-    mkImp True r1 r2 = (j, ra `cross` j, rb `cross` j)
+    mkImp True r1 r2
+        | (r1-r2) `dot` vab < 0 = Nothing
+        | otherwise             = Just (j, ra `cross` j, rb `cross` j)
       where
         ra = r1-p1
         rb = r2-p2
         vab = v1+perpL ra*.w1-v2-perpL rb*.w2
-        j = if (r1-r2) `dot` vab < 0 then V 0 0
-            else vab*.(fsl*(1+eps)/(m1'+m2'+i1'*square ra+i2'*square rb))
+        j = vab*.((1+eps)/(m1'+m2'+i1'*square ra+i2'*square rb))
     addImp (j1,ta1,tb1) (j2,ta2,tb2) = (j1+j2,ta1+ta2,tb1+tb2)
-    mulMasses (j,ta,tb) = (j*.(-m1'),-ta*i1',j*.m2',tb*i2')
+    fsl = recip (fromIntegral (length imps))
+    mulMasses (j,ta,tb) = (j*.(-m1'*fsl),-ta*i1'*fsl,j*.(m2'*fsl),tb*i2'*fsl)
 
 transRot :: V2 -> Angle -> T2
 transRot v a = rotate a `withTranslation` v

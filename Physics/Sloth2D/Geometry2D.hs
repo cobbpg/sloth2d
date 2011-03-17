@@ -234,14 +234,15 @@ convexSeparations :: Vector V2    -- ^ The vertices of the first polygon (vs1)
                   -> Vector V2    -- ^ The vertices of the second polygon (vs2)
                   -> Vector Angle -- ^ Must equal @angles vs2@
                   -> (Float,Float,[(Bool,Int,Int,V2,V2)])
-convexSeparations vs1 as1 vs2 as2 = (d2min,dsmin,
+convexSeparations vs1 as1 vs2 as2 = (d2min,-dsmin,
                                      map finaliseDist (filter ((==dmin) . getDist) cs))
   where
     cs = [(s,ei1,vi2,v1,v2,ds,d2) |
           (s,cs) <- [(True,evcs vs1 as1 vs2 as2),(False,evcs vs2 as2 vs1 as1)],
           (ei1,vi2,(v1,v2,ds,d2)) <- cs]
     dmin@(d2min,dsmin) = minimum (map getDist cs)
-    getDist (_,_,_,_,_,ds,d2) = (d2,ds) -- preferring negative distances
+    -- Preferring positive distances (needed for acute corners)
+    getDist (_,_,_,_,_,ds,d2) = (d2,-ds)
     finaliseDist (s,ei1,vi2,v1,v2,ds,d2) = (s,ei1,vi2,v1,v2)
 
     -- Matching the vertices of vs2 to the opposing edges of vs1
