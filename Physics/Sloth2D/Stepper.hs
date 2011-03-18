@@ -1,6 +1,7 @@
 module Physics.Sloth2D.Stepper
     ( Stepper
-    , stepper, advance, lerpFactor
+    , stepper, advance
+    , lerpFactor, timeStep
     ) where
 
 -- | A time step manager entity to fix the time steps of the
@@ -39,3 +40,7 @@ advance dt s = (n,s')
 -- with the previous state.
 lerpFactor :: Stepper -> Float
 lerpFactor s = tfrac s*tstep' s
+
+-- | The time step associated with a stepper.
+timeStep :: Stepper -> Float
+timeStep = tstep

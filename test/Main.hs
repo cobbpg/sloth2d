@@ -6,16 +6,18 @@ import Data.Maybe
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
 import Graphics.UI.GLFW
-import Graphics.Rendering.OpenGL as GL
+import Graphics.Rendering.OpenGL as GL hiding (position)
 import System.IO
 
 import Physics.Sloth2D.Body
+import Physics.Sloth2D.Dynamics
 import Physics.Sloth2D.Shape
+import Physics.Sloth2D.Stepper
 
 import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 
-bodies =
+world = dynamicWorld (1/60) 0.2 `withBodies`
     [ fromShape (regularShape 3 10) `withPosition` (V 12 0, 0)
     , fromShape (regularShape 3 10) `withPosition` (V (-12) 0, pi)
     , fromShape (regularShape 3 10) `withPosition` (V 0 10, pi*0.5)
@@ -46,7 +48,7 @@ main = do
         GL.scale (s*min 1 r) (s*min 1 r') (1 :: GLfloat)
         --GL.translate $ Vector3 0 (-0.5*lr) (0 :: GLfloat)
 
-    bodyLists <- forM bodies $ \body -> do
+    bodyLists <- forM (bodies world) $ \body -> do
         let sh = shape body
             vs = vertices sh
             tris = triangulation vs
@@ -62,16 +64,19 @@ main = do
 
     blend $= Enabled
     blendFunc $= (SrcAlpha,OneMinusSrcAlpha)
-    flip fix bodies $ \loop bodies -> do
-        render bodies bodyLists
+    time $= 0
+    flip fix world $ \loop world -> do
+        render (lerpFactor (manager world)) (bodies world) bodyLists
         sleep 0.02
         stop <- readIORef closed
         esc <- getKey ESC
-        when (not stop && esc /= Press) (loop (advance 0.02 bodies))
+        dt <- get time
+        time $= 0
+        when (not stop && esc /= Press) (loop (world `advancedBy` (realToFrac dt)))
 
     closeWindow
 
-render bodies lists = do
+render dt bodies lists = do
     clear [ColorBuffer]
 
     let magn = recip 15
@@ -81,8 +86,8 @@ render bodies lists = do
 
     color $ Color4 1 1 1 (0.5 :: GLfloat)
     forM_ (zip bodies lists) $ \(body,list) -> preservingMatrix $ do
-        let V x y = curP body
-            a = curA body
+        let V x y = position dt body
+            a = orientation dt body
         GL.translate $ Vector3 (realToFrac x) (realToFrac y) (0 :: GLfloat)
         GL.rotate (realToFrac (a*180/pi) :: GLfloat) $ Vector3 0 0 1
         callList list
@@ -102,14 +107,3 @@ render bodies lists = do
 regularShape n s = polygonShape (V.generate n f)
   where
     f i = unit (2*pi*fromIntegral i/fromIntegral n) *. s
-
-advance dt bodies = V.toList (V.map (integrate dt) collbs)
-  where
-    bs = V.map shiftBody (V.fromList bodies)
-    num = V.length bs - 1
-    collbs = V.accum addImpact bs [r | i1 <- [0..num], i2 <- [i1+1..num], r <- check i1 i2]
-      where
-        addImpact body (p,v,w) = body `nudgedBy` (v,w) `movedBy` (p*.0.3,0)
-        check i1 i2 = case collisionResponse 1 (bs ! i1) (bs ! i2) of
-            Nothing -> []
-            Just (p1,v1,w1,p2,v2,w2) -> [(i1,(p1,v1,w1)),(i2,(p2,v2,w2))]
