@@ -22,11 +22,11 @@ bodies =
     , fromShape (regularShape 3 10) `withPosition` (V 0 (-10), pi*1.5)
     , fromShape (regularShape 4 1) `withMass` 1 `withPosition` (V 0.5 0, 0) `withVelocity` (V 3 1, 0)
     , fromShape (regularShape 5 1) `withMass` 2 `withPosition` (V (-2) 0, pi/8) `withVelocity` (V 2 3, 0)
-    , fromShape (regularShape 6 1) `withMass` 3 `withPosition` (V 2 (-1), 0) `withVelocity` (V 4 0, 1)
+    , fromShape (regularShape 6 2) `withMass` 20 `withPosition` (V 2 (-1), 0) `withVelocity` (V 4 0, 1)
     ]
     ++
-    [fromShape (regularShape 3 0.4) `withMass` 0.3 `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(1.5), 0) |
-     a <- [0,pi*0.1..pi*1.9]]
+    [fromShape (regularShape (i `div` 3+3) 0.4) `withMass` 0.3 `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(1.5), 0) |
+     i <- [0..19], let a = pi*fromIntegral i/10]
 
 main = do
     initialize
@@ -107,8 +107,9 @@ advance dt bodies = V.toList (V.map (integrate dt) collbs)
   where
     bs = V.map shiftBody (V.fromList bodies)
     num = V.length bs - 1
-    collbs = V.accum nudgedBy bs [r | i1 <- [0..num], i2 <- [i1+1..num], r <- check i1 i2]
+    collbs = V.accum addImpact bs [r | i1 <- [0..num], i2 <- [i1+1..num], r <- check i1 i2]
       where
+        addImpact body (p,v,w) = body `nudgedBy` (v,w) `movedBy` (p*.0.3,0)
         check i1 i2 = case collisionResponse 1 (bs ! i1) (bs ! i2) of
             Nothing -> []
-            Just (v1,w1,v2,w2) -> [(i1,(v1,w1)),(i2,(v2,w2))]
+            Just (p1,v1,w1,p2,v2,w2) -> [(i1,(p1,v1,w1)),(i2,(p2,v2,w2))]
