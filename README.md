@@ -21,7 +21,7 @@ Planned features
 
 * concave colliders
 * round colliders
-* colliders with rounded corners
+* plane colliders
 * collision layers
 * spatial hashing
 * object deactivation

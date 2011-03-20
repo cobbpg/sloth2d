@@ -1,6 +1,7 @@
 import Control.Monad
 import Control.Monad.Fix
 import Data.IORef
+import qualified Data.IntMap as M
 import Data.List
 import Data.Maybe
 import Data.Vector (Vector, (!))
@@ -17,7 +18,7 @@ import Physics.Sloth2D.Stepper
 import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 
-world = dynamicWorld (1/60) 0.2 `withBodies`
+(world, _) = addBodies (dynamicWorld (1/60) 0.2) $
     [ fromShape (regularShape 3 10) `withPosition` (V 12 0, 0)
     , fromShape (regularShape 3 10) `withPosition` (V (-12) 0, pi)
     , fromShape (regularShape 3 10) `withPosition` (V 0 10, pi*0.5)
@@ -46,9 +47,8 @@ main = do
         matrixMode $= Projection
         loadIdentity
         GL.scale (s*min 1 r) (s*min 1 r') (1 :: GLfloat)
-        --GL.translate $ Vector3 0 (-0.5*lr) (0 :: GLfloat)
 
-    bodyLists <- forM (bodies world) $ \body -> do
+    bodyLists <- forM (M.elems (bodies world)) $ \body -> do
         let sh = shape body
             vs = vertices sh
             tris = triangulation vs
@@ -66,14 +66,13 @@ main = do
     blendFunc $= (SrcAlpha,OneMinusSrcAlpha)
     time $= 0
     flip fix world $ \loop world -> do
-        render (lerpFactor (manager world)) (bodies world) bodyLists
+        render (lerpFactor (manager world)) (M.elems (bodies world)) bodyLists
         sleep 0.02
         stop <- readIORef closed
         esc <- getKey ESC
         dt <- get time
         time $= 0
         when (not stop && esc /= Press) (loop (world `advancedBy` (realToFrac dt)))
-
     closeWindow
 
 render dt bodies lists = do
