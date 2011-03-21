@@ -29,7 +29,6 @@ data V2 = V {-# UNPACK #-} !Float {-# UNPACK #-} !Float
 data T2 = T
     {-# UNPACK #-} !Float {-# UNPACK #-} !Float
     {-# UNPACK #-} !Float {-# UNPACK #-} !Float
-    {-# UNPACK #-} !Float {-# UNPACK #-} !Float
     deriving Show
 
 instance Num V2 where
@@ -111,69 +110,64 @@ norm v@(V x y) = V (x*m) (y*m)
 
 instance Monoid T2 where
     mempty = scale 1
-    T a1 b1 c1 d1 tx1 ty1 `mappend` T a2 b2 c2 d2 tx2 ty2 = T a b c d tx ty
+    T rx1 ry1 tx1 ty1 `mappend` T rx2 ry2 tx2 ty2 = T rx ry tx ty
       where
-        a = a1*a2+b1*c2
-        b = a1*b2+b1*d2
-        c = c1*a2+d1*c2
-        d = c1*b2+d1*d2
-        tx = a1*tx2+b1*ty2+tx1
-        ty = c1*tx2+d1*ty2+ty1
+        rx = rx1*rx2-ry1*ry2
+        ry = ry1*rx2+rx1*ry2
+        tx = rx1*tx2-ry1*ty2+tx1
+        ty = ry1*tx2+rx1*ty2+ty1
 
 -- | Inverse transformation
 inverse :: T2 -> T2
-inverse (T a b c d tx ty) = T (d*m) (-b*m) (-c*m) (a*m) tx' ty'
+inverse (T rx ry tx ty) = T (rx*m) (-ry*m) tx' ty'
   where
-    m = recip (a*d-b*c)
-    tx' = m*(b*ty-d*tx)
-    ty' = m*(c*tx-a*ty)
+    m = recip (rx*rx+ry*ry)
+    tx' = m*(-ry*ty-rx*tx)
+    ty' = m*(ry*tx-rx*ty)
 
 -- | Transformation applied to a vector.
 (<>) :: T2 -> V2 -> V2
-T a b c d tx ty <> V x y = V x' y'
+T rx ry tx ty <> V x y = V x' y'
   where
-    x' = a*x+b*y+tx
-    y' = c*x+d*y+ty
+    x' = rx*x-ry*y+tx
+    y' = ry*x+rx*y+ty
 
 -- | Transformation representing a translation.
 translate :: V2 -> T2
-translate (V x y) = T 1 0 0 1 x y
+translate (V x y) = T 1 0 x y
 
 -- | Transformation representing a rotation.
 rotate :: Angle -> T2
-rotate a = T ca (-sa) sa ca 0 0
-  where
-    sa = sin a
-    ca = cos a
+rotate a = T (cos a) (sin a) 0 0
 
 -- | Transformation representing a scaling.
 scale :: Float -> T2
-scale m = T m 0 0 m 0 0
+scale m = T m 0 0 0
 
 -- | The translation factor of a transformation.
 translationOf :: T2 -> V2
-translationOf (T _ _ _ _ x y) = V x y
+translationOf (T _ _ tx ty) = V tx ty
 
 -- | The rotation factor of a transformation.
 rotationOf :: T2 -> Angle
-rotationOf (T x _ y _ _ _) = dir (V x y)
+rotationOf (T rx ry _ _) = dir (V rx ry)
 
 -- | The scaling factor of a transformation.
 scaleOf :: T2 -> Float
-scaleOf (T a b c d _ _) = sqrt (a*d-b*c)
+scaleOf (T rx ry _ _) = mag (V rx ry)
 
 -- | Replacing the translation factor of a transformation.
 withTranslation :: T2 -> V2 -> T2
-T a b c d _ _ `withTranslation` V x y = T a b c d x y
+T rx ry _ _ `withTranslation` V x y = T rx ry x y
 
 -- | Replacing the rotation factor of a transformation.
 withRotation :: T2 -> Angle -> T2
-t `withRotation` a = t `mappend` rotate (a-rotationOf t)
+T rx ry tx ty `withRotation` a = T rx' ry' tx ty
+  where
+    V rx' ry' = unit a *. mag (V rx ry)
 
 -- | Replacing the scaling factor of a transformation.
 withScale :: T2 -> Float -> T2
-t `withScale` m = t `mappend` scale m'
+T rx ry tx ty `withScale` m = T (m'*rx) (m'*ry) tx ty
   where
-    m' = case scaleOf t of
-        0 -> 0
-        m'' -> m/m''
+    m' = m / mag (V rx ry)
