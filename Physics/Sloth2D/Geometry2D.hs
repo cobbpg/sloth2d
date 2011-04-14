@@ -288,96 +288,98 @@ convexSeparations vs1 as1 vs2 as2 = (d2min,-dsmin,
 --persistentConvexSeparations
 --    :: Vector V2       -- ^ The vertices of the first polygon (vs1)
 --    -> Vector V2       -- ^ The vertices of the second polygon (vs2)
---    -> (Bool,Int,Int)  -- ^ Separation hint (e.g. previous output)
+--    -> (Ordering,Int,Int)  -- ^ Separation hint (e.g. previous output)
 --    -> (Float,Float,[((Bool,Int,Int),(V2,V2))])
 
--- code duplication can be avoided by carrying the vs and pred
--- functions as well (it might not be beneficial though)
-persistentConvexSeparations vs1 vs2 s0@(b,i1,i2) =
-    take 15 $ iterate stepForward start
+-- LT = VE; EQ = EE; GT = EV -> mnemonic: E > V
+persistentConvexSeparations vs1 vs2 s0 =
+    (take 15 (iterate stepForward start),
+     take 15 (iterate stepBackwards start))
   where
     l1 = V.length vs1
     l2 = V.length vs2
-
-    start = if validSeparation s0 then s0
-            else if validSeparation s0' then s0'
-                 else until validSeparation searchStart s0
-      where
-        s0' = if l1 < l2 then (b,pred1 i1,i2) else (b,i1,pred2 i2)
-        searchStart
-            | l1 < l2   = \(b,i1,i2) -> (b,succ1 i1,i2)
-            | otherwise = \(b,i1,i2) -> (b,i1,succ2 i2)
-
     succ1 n = let n' = succ n in if n' >= l1 then 0 else n'
     succ2 n = let n' = succ n in if n' >= l2 then 0 else n'
     pred1 n = if n == 0 then l1-1 else pred n
     pred2 n = if n == 0 then l2-1 else pred n
 
-    stepForward (False,vi1,ei2) = (e1 `turnL` e2,vi1,ei2')
+    start = until validSeparation searchStart s0
       where
-        vi1' = succ1 vi1
-        ei2' = succ2 ei2
-        ei2'' = succ2 ei2'
-        e1 = vs1 ! vi1 - vs1 ! vi1'
-        e2 = vs2 ! ei2'' - vs2 ! ei2'
-    stepForward (True,ei1,vi2) = (e1 `turnL` e2,ei1',vi2)
-      where
-        vi2' = succ2 vi2
-        ei1' = succ1 ei1
-        ei1'' = succ1 ei1'
-        e2 = vs2 ! vi2 - vs2 ! vi2'
-        e1 = vs1 ! ei1'' - vs1 ! ei1'
+        searchStart
+            | l1 < l2   = step succ1 id
+            | otherwise = step id succ2
+          where
+            step s1 s2 (LT,i1,i2) = (LT,s1 i1,s2 i2)
+            step s1 s2 (_ ,i1,i2) = (GT,s1 i1,s2 i2)
 
-    stepBackward (False,vi1,ei2)
-        | e1 `turnL` e2 = (False,vi1,ei2')
-        | otherwise     = (True,vi1',ei2)
+    stepForward (rel,i1,i2) = case rel of
+        LT -> (turn e1  e2',i1 ,i2')
+        EQ -> (turn e1' e2',i1',i2')
+        GT -> (turn e1' e2 ,i1',i2 )
       where
-        vi1' = pred1 vi1
-        ei2' = pred2 ei2
-        e1 = vs1 ! vi1 - vs1 ! vi1'
-        e2 = vs2 ! ei2' - vs2 ! ei2
-    stepBackward (True,ei1,vi2)
-        | e1 `turnL` e2 = (False,ei1,vi2')
-        | otherwise     = (True,ei1',vi2)
-      where
-        vi2' = pred2 vi2
-        ei1' = pred1 ei1
-        e2 = vs2 ! vi2 - vs2 ! vi2'
-        e1 = vs1 ! ei1' - vs1 ! ei1
+        i1' = succ1 i1
+        i2' = succ2 i2
+        e1 = vs1 ! i1' - vs1 ! i1
+        e2 = vs2 ! i2 - vs2 ! i2'
+        e1' = vs1 ! succ1 i1' - vs1 ! i1'
+        e2' = vs2 ! i2' - vs2 ! succ2 i2'
 
-    validSeparation (False,vi1,ei2) = e11 `turnNR` e2 && e2 `turnNR` e12
+    stepBackwards (_,i1,i2) = case turn e2 e1 of
+        LT -> (LT,i1,i2')
+        EQ -> (EQ,i1',i2')
+        GT -> (GT,i1',i2)
       where
-        v = vs1 ! vi1
-        e11 = v - vs1 ! pred1 vi1
-        e12 = vs1 ! succ1 vi1 - v
-        e2 = vs2 ! ei2 - vs2 ! succ2 ei2
-    validSeparation (True,ei1,vi2) = e21 `turnNR` e1 && e1 `turnNR` e22
+        i1' = pred1 i1
+        i2' = pred2 i2
+        e1 = vs1 ! i1 - vs1 ! i1'
+        e2 = vs2 ! i2' - vs2 ! i2
+
+    validSeparation (rel,i1,i2) = case rel of
+        LT -> turnNR e11 e22 && turnNR e22 e12
+        EQ -> parv e12 e22
+        GT -> turnNR e21 e12 && turnNR e12 e22
       where
-        v = vs2 ! vi2
-        e21 = v - vs2 ! pred2 vi2
-        e22 = vs2 ! succ2 vi2 - v
-        e1 = vs1 ! ei1 - vs1 ! succ1 ei1
+        v1 = vs1 ! i1
+        v2 = vs2 ! i2
+        e11 = v1 - vs1 ! pred1 i1
+        e12 = vs1 ! succ1 i1 - v1
+        e21 = vs2 ! pred2 i2 - v2
+        e22 = v2 - vs2 ! succ2 i2
 
-    separation (False,vi1,ei2) = separation' (vs2 ! ei2) (vs2 ! succ2 ei2) (vs1 ! vi1)
-    separation (True, ei1,vi2) = separation' (vs1 ! ei1) (vs1 ! succ1 ei1) (vs2 ! vi2)
-
-    separation' v1 v2 v3 = (v,v3,signum cp,d2)
+    separation (sep,i1,i2) = case sep of
+        LT -> s v2 v2' e2 sd2 v1
+        GT -> s v1 v1' e1 sd1 v2
+        EQ | sd1 > sd2 -> min (s v1 v1' e1 sd1 v2) (s v1 v1' e1 sd1 v2')
+           | otherwise -> min (s v2 v2' e2 sd2 v1) (s v2 v2' e2 sd2 v1')
       where
-        v12 = v2-v1
-        v13 = v3-v1
-        v23 = v3-v2
-        sd12 = square v12
-        sd12' = recip sd12
-        dp = v12 `dot` v13
-        cp = v13 `cross` v12 -- this can be flipped later!
-        (v,d2) | dp <= 0    = (v1,square v13)
-               | dp >= sd12 = (v2,square v23)
-               | otherwise  = (v1+v12*.(dp*sd12'),cp*cp*sd12')
+        v1 = vs1 ! i1
+        v2 = vs2 ! i2
+        v1' = vs1 ! succ1 i1
+        v2' = vs2 ! succ2 i2
+        e1 = v1'-v1
+        e2 = v2'-v2
+        sd1 = square e1
+        sd2 = square e2
 
-convexSeparations' vs1 vs2 = persistentConvexSeparations vs1 vs2 (False,0,0)
+        -- The squared distance of the v1 to v2 segment and the v3 vertex.
+        s v1 v2 v12 sd12 v3 = (sd,signum cp,v,v3)
+          where
+            --v12 = v2-v1
+            v13 = v3-v1
+            v23 = v3-v2
+            --sd12 = square v12
+            sd12' = recip sd12
+            dp = v12 `dot` v13
+            -- negative: separation, positive: penetration
+            cp = v12 `cross` v13
+            (v,sd) | dp <= 0    = (v1,square v13)
+                   | dp >= sd12 = (v2,square v23)
+                   | otherwise  = (v1+v12*.(dp*sd12'),cp*cp*sd12')
+
+convexSeparations' vs1 vs2 = persistentConvexSeparations vs1 vs2 (GT,0,0)
 
 test = convexSeparations' test1 test2
 
-test1 = V.fromList [V 0 2,V 0 0,V 2 0,V 2 2]
+test1 = V.fromList [V 0 0,V 2 0,V 2 2,V 0 2]
 
-test2 = V.fromList [V 0 9,V (-1) 8,V 1 8]
+test2 = V.fromList [V 1 (-3),V 3 (-1),V 1 (-1)]
