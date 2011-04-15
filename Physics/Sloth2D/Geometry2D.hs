@@ -24,6 +24,16 @@ data Vertex = Vtx
 
 type MonotoneSegment = ([Int],[Int])
 
+-- | Descriptor for a pair of features.  The ordering stands for the
+-- following configurations: @LT@ - V to E, @EQ@ - E to E, @GT - E to
+-- V, where E stands for edge and V stands for vertex (in other words,
+-- you can think of edges being greater than vertices).  The integers
+-- are the indices of the features: the vertex itself or the first
+-- vertex (in ccw order) of the edge.  For instance, @(LT,2,4)@ means
+-- the pair formed by vertex 2 of the first body and the edge between
+-- vertices 4 and 5 of the second body.
+type Separation = (Ordering, Int, Int)
+
 -- | Checking whether an angle is within a given interval.
 between :: Angle -> (Angle,Angle) -> Bool
 a `between` (a1,a2)
@@ -218,83 +228,20 @@ monotoneTriangulation vs (msl,msr) = snd (foldl' addVertex ([si2,si1],[]) sis)
 triangulation :: Vector V2 -> [(Int, Int, Int)]
 triangulation vs = [tri | ms <- monotoneDecomposition vs, tri <- monotoneTriangulation vs ms]
 
--- | A triple @(d2,ds,fs)@ that describes the closest opposing
--- features (only edge-vertex pairs) of two convex polygons, where
--- @d2@ is the square of the distance, @ds@ is its sign (negative in
--- case of penetration), and @fs@ is the list describing the feature
--- pairs with this distance. Each element of @fs@ is a tuple
--- @(b,ei1,vi2,v1,v2)@ where @ei1@ is the edge id (id of its first
--- vertex counter-clockwise) and @vi2@ is the opposing vertex id, @v1@
--- and @v2@ are the absolute coordinates of the separation points
--- (@v2@ always equals the vertex), and the boolean @b@ specifies
--- whether the edge belongs to the first polygon (@True@) or the
--- second (@False@).
-convexSeparations :: Vector V2    -- ^ The vertices of the first polygon (vs1)
-                  -> Vector Angle -- ^ Must equal @angles vs1@
-                  -> Vector V2    -- ^ The vertices of the second polygon (vs2)
-                  -> Vector Angle -- ^ Must equal @angles vs2@
-                  -> (Float,Float,[(Bool,Int,Int,V2,V2)])
-convexSeparations vs1 as1 vs2 as2 = (d2min,-dsmin,
-                                     map finaliseDist (filter ((==dmin) . getDist) cs))
-  where
-    cs = [(s,ei1,vi2,v1,v2,ds,d2) |
-          (s,cs) <- [(True,evcs vs1 as1 vs2 as2),(False,evcs vs2 as2 vs1 as1)],
-          (ei1,vi2,(v1,v2,ds,d2)) <- cs]
-    dmin@(d2min,dsmin) = minimum (map getDist cs)
-    -- Preferring positive distances (needed for acute corners)
-    getDist (_,_,_,_,_,ds,d2) = (d2,-ds)
-    finaliseDist (s,ei1,vi2,v1,v2,ds,d2) = (s,ei1,vi2,v1,v2)
-
-    -- Matching the vertices of vs2 to the opposing edges of vs1
-    evcs vs1 as1 vs2 as2 = [(ei1,vi2,separation ei1 vi2) | (vi2,as) <- matches, (ei1,a) <- as]
-      where
-        as1' = V.imap (,) as1
-        as2' = V.map (+<pi) as2
-        ivs2 = V.imap (,) (V.zip (V.cons (V.last as2') as2') as2')
-        ivs2' = V.take (V.length ivs2 + 1) $
-                V.dropWhile (not . opposite) $ V.dropWhile opposite $
-                V.cons (V.last ivs2) ivs2 V.++ ivs2
-        opposite = between (snd (V.head as1')) . snd
-
-        -- Finding opposing edge-vertex pairs
-        matches = go (V.toList ivs2') (V.toList as1')
-          where
-            go [] _ = []
-            go ((i1,iv):ivs) as = if null pre then go ivs post
-                                  else (i1,pre) : go ivs rest
-              where
-                (pre,post) = span ((`between` iv) . snd) as
-                a = last pre
-                rest = if snd iv == snd a then a : post else post
-
-        -- Extracting separation information (coordinates and signed
-        -- distance squared)
-        separation ei1 vi2 = (v,v3,signum cp,d2)
-          where
-            v1 = vs1 ! ei1
-            v2 = vs1 ! mod (ei1+1) (V.length vs1)
-            v3 = vs2 ! vi2
-            v12 = v2-v1
-            v13 = v3-v1
-            v23 = v3-v2
-            sd12 = square v12
-            sd12' = recip sd12
-            dp = v12 `dot` v13
-            cp = v13 `cross` v12
-            (v,d2) = if dp <= 0 then (v1,square v13)
-                     else if dp >= sd12 then (v2,square v23)
-                          else (v1+v12*.(dp*sd12'),cp*cp*sd12')
-
---persistentConvexSeparations
---    :: Vector V2       -- ^ The vertices of the first polygon (vs1)
---    -> Vector V2       -- ^ The vertices of the second polygon (vs2)
---    -> (Ordering,Int,Int)  -- ^ Separation hint (e.g. previous output)
---    -> (Float,Float,[((Bool,Int,Int),(V2,V2))])
-
--- LT = VE; EQ = EE; GT = EV -> mnemonic: E > V
+-- | The same as 'convexSpearations', but accepting a separation hint
+-- to start searching from.
+persistentConvexSeparations
+    :: Vector V2   -- ^ The vertices of the first polygon (vs1)
+    -> Vector V2   -- ^ The vertices of the second polygon (vs2)
+    -> Separation  -- ^ Separation hint (e.g. previous output)
+    -> (Float, Float, [(Separation, (V2, V2))])
 persistentConvexSeparations vs1 vs2 s0 =
-    (take 15 (iterate stepForward start),
-     take 15 (iterate stepBackwards start))
+    case sepcmp (separation start) (separation start') of
+        LT -> closestPairs stepBackwards start
+        GT -> closestPairs stepForward start'
+        EQ -> case sepcmp (separation (stepBackwards start)) (separation (stepForward start')) of
+            LT -> closestPairs stepBackwards start'
+            _  -> closestPairs stepForward start
   where
     l1 = V.length vs1
     l2 = V.length vs2
@@ -303,15 +250,37 @@ persistentConvexSeparations vs1 vs2 s0 =
     pred1 n = if n == 0 then l1-1 else pred n
     pred2 n = if n == 0 then l2-1 else pred n
 
-    start = until validSeparation searchStart s0
-      where
-        searchStart
-            | l1 < l2   = step succ1 id
-            | otherwise = step id succ2
-          where
-            step s1 s2 (LT,i1,i2) = (LT,s1 i1,s2 i2)
-            step s1 s2 (_ ,i1,i2) = (GT,s1 i1,s2 i2)
+    sepcmp = comparing fst
 
+{-
+    closestPairs step s = go (step s) [(s,v12)] dst
+      where
+        (dst,v12) = separation s
+        go s mins dst@(sd,sgd) = case compare dst dst' of
+            LT -> (sd,-sgd,mins)
+            EQ -> go (step s) ((s,v12):mins) dst
+            GT -> go (step s) [(s,v12)] dst'
+          where
+            (dst',v12) = separation s
+-}
+
+    -- TODO: avoid exhaustive search
+    closestPairs step s = go (l1+l2-1) (step s) [(s,v12)] dst
+      where
+        (dst,v12) = separation s
+        go 0 _ mins dst@(sd,sgd) = (sd,-sgd,mins)
+        go n s mins dst@(sd,sgd) = case compare dst dst' of
+            LT -> go n' (step s) mins dst
+            EQ -> go n' (step s) ((s,v12):mins) dst
+            GT -> go n' (step s) [(s,v12)] dst'
+          where
+            (dst',v12) = separation s
+            n' = n-1
+
+    start' = stepForward start
+    start = until validSeparation stepForward s0
+
+    -- Step towards the next feature pair counter-clockwise
     stepForward (rel,i1,i2) = case rel of
         LT -> (turn e1  e2',i1 ,i2')
         EQ -> (turn e1' e2',i1',i2')
@@ -324,16 +293,19 @@ persistentConvexSeparations vs1 vs2 s0 =
         e1' = vs1 ! succ1 i1' - vs1 ! i1'
         e2' = vs2 ! i2' - vs2 ! succ2 i2'
 
+    -- Step towards the next feature pair clockwise
     stepBackwards (_,i1,i2) = case turn e2 e1 of
-        LT -> (LT,i1,i2')
+        LT -> (LT,i1 ,i2')
         EQ -> (EQ,i1',i2')
-        GT -> (GT,i1',i2)
+        GT -> (GT,i1',i2 )
       where
         i1' = pred1 i1
         i2' = pred2 i2
         e1 = vs1 ! i1 - vs1 ! i1'
         e2 = vs2 ! i2' - vs2 ! i2
 
+    -- Check if the feature pair is valid (i.e. the edge lies within
+    -- the interval defined by the vertex, or the edges are parallel)
     validSeparation (rel,i1,i2) = case rel of
         LT -> turnNR e11 e22 && turnNR e22 e12
         EQ -> parv e12 e22
@@ -346,11 +318,12 @@ persistentConvexSeparations vs1 vs2 s0 =
         e21 = vs2 ! pred2 i2 - v2
         e22 = v2 - vs2 ! succ2 i2
 
+    -- Distance information for a given feature pair
     separation (sep,i1,i2) = case sep of
-        LT -> s v2 v2' e2 sd2 v1
-        GT -> s v1 v1' e1 sd1 v2
-        EQ | sd1 > sd2 -> min (s v1 v1' e1 sd1 v2) (s v1 v1' e1 sd1 v2')
-           | otherwise -> min (s v2 v2' e2 sd2 v1) (s v2 v2' e2 sd2 v1')
+        LT -> s v2 v2' e2 sd2 v1 False
+        GT -> s v1 v1' e1 sd1 v2 True
+        EQ | sd1 > sd2 -> min (s v1 v1' e1 sd1 v2 True) (s v1 v1' e1 sd1 v2' True)
+           | otherwise -> min (s v2 v2' e2 sd2 v1 False) (s v2 v2' e2 sd2 v1' False)
       where
         v1 = vs1 ! i1
         v2 = vs2 ! i2
@@ -362,7 +335,7 @@ persistentConvexSeparations vs1 vs2 s0 =
         sd2 = square e2
 
         -- The squared distance of the v1 to v2 segment and the v3 vertex.
-        s v1 v2 v12 sd12 v3 = (sd,signum cp,v,v3)
+        s v1 v2 v12 sd12 v3 b = ((sd,signum cp),if b then (v,v3) else (v3,v))
           where
             --v12 = v2-v1
             v13 = v3-v1
@@ -376,10 +349,12 @@ persistentConvexSeparations vs1 vs2 s0 =
                    | dp >= sd12 = (v2,square v23)
                    | otherwise  = (v1+v12*.(dp*sd12'),cp*cp*sd12')
 
-convexSeparations' vs1 vs2 = persistentConvexSeparations vs1 vs2 (GT,0,0)
-
-test = convexSeparations' test1 test2
-
-test1 = V.fromList [V 0 0,V 2 0,V 2 2,V 0 2]
-
-test2 = V.fromList [V 1 (-3),V 3 (-1),V 1 (-1)]
+-- | A triple @(d2,ds,fs)@ that describes the closest opposing
+-- features of two convex polygons, where @d2@ is the square of the
+-- distance, @ds@ is its sign (negative in case of penetration), and
+-- @fs@ is the list describing the feature pairs with this
+-- distance. Each element of @fs@ is a tuple @(sep,v1,v2)@ where @sep@
+-- describes the opposing features, while, @v1@ and @v2@ are the
+-- absolute coordinates of the separation points.
+convexSeparations :: Vector V2 -> Vector V2 -> (Float, Float, [(Separation, (V2, V2))])
+convexSeparations vs1 vs2 = persistentConvexSeparations vs1 vs2 (GT,0,0)

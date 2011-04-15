@@ -17,12 +17,11 @@ data DynamicState = Dyn
 
 data Body = Body
     { shape :: Shape
-    , edgeAngles :: Vector Float
     , masses :: (Float, Float, Float, Float)  -- mass, 1/mass, moment, 1/moment
     , curState :: DynamicState
-    , curGeometry :: (Vector V2, Vector Float)  -- vertices, edge directions
+    , curGeometry :: Vector V2
     , prevState :: DynamicState
-    , prevGeometry :: (Vector V2, Vector Float)  -- vertices, edge directions
+    , prevGeometry :: Vector V2
     } deriving Show
 
 shiftBody :: Body -> Body
@@ -34,16 +33,14 @@ integrate dt body = body `movedBy` (curV body*.dt, curW body*dt)
 fromShape :: Shape -> Body
 fromShape shape = Body
     { shape = shape
-    , edgeAngles = as
     , masses = (0,0,0,0)
     , curState = st
-    , curGeometry = (vs,as)
+    , curGeometry = vs
     , prevState = st
-    , prevGeometry = (vs,as)
+    , prevGeometry = vs
     }
   where
     vs = vertices shape
-    as = angles vs
     st = Dyn (V 0 0) (V 0 0) 0 0
 
 withMass :: Body -> Float -> Body
@@ -56,11 +53,10 @@ body `withMass` mass = body { masses = (m,m',am,am') }
 
 withState :: Body -> DynamicState -> Body
 body `withState` st@(Dyn p _ a _) =
-    body { curState = st, curGeometry = (vs,as) }
+    body { curState = st, curGeometry = vs }
   where
     t = transRot p a
     vs = V.map (t <>) (vertices (shape body))
-    as = V.map (a +<) (edgeAngles body)
 
 withPosition :: Body -> (V2, Angle) -> Body
 body@Body { curState = Dyn _ v _ w } `withPosition` (p,a) =
@@ -148,16 +144,15 @@ collisionResponse :: Float -> Body -> Body -> Maybe (V2, V2, Float, V2, V2, Floa
 collisionResponse eps b1 b2 = if null imps then Nothing
                               else Just (mulMasses (foldl' addImp nullImp imps))
   where
-    Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 a1 w1, curGeometry = (vs1,as1) } = b1
-    Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 a2 w2, curGeometry = (vs2,as2) } = b2
+    Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 a1 w1, curGeometry = vs1 } = b1
+    Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 a2 w2, curGeometry = vs2 } = b2
     m12' = m1'+m2'
     m12'' = recip m12'
     tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^2
-    (d2,ds,fs) = convexSeparations vs1 as1 vs2 as2
+    (d2,ds,fs) = convexSeparations vs1 vs2
     imps = if tooFar || ds > 0 || (m1' == 0 && m2' == 0) then []
-           else [mkImp b r1 r2 | (b,_,_,r1,r2) <- fs]
-    mkImp False r1 r2 = mkImp True r2 r1
-    mkImp True r1 r2
+           else [mkImp r1 r2 | (_,(r1,r2)) <- fs]
+    mkImp r1 r2
         | d < 0     = Left n
         | otherwise = Right (n,j,ta,tb)
       where
