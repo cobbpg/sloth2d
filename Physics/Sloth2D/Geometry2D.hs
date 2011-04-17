@@ -186,8 +186,8 @@ monotoneDecomposition vs = (map getIndices . snd) (V.foldl' addVertex ([], []) s
           _            -> Side
         i0 = if i1 == 0 then V.length ovs - 1 else i1-1
         i2 = if i1 == V.length ovs - 1 then 0 else i1+1
-        v0@(V x0 y0) = ovs ! i0
-        v2@(V x2 y2) = ovs ! i2
+        v0@(V _ y0) = ovs ! i0
+        v2@(V _ y2) = ovs ! i2
 
 -- | Triangulation of a monotone polygon.
 monotoneTriangulation :: Vector V2 -> MonotoneSegment -> [(Int,Int,Int)]
@@ -228,20 +228,17 @@ monotoneTriangulation vs (msl,msr) = snd (foldl' addVertex ([si2,si1],[]) sis)
 triangulation :: Vector V2 -> [(Int, Int, Int)]
 triangulation vs = [tri | ms <- monotoneDecomposition vs, tri <- monotoneTriangulation vs ms]
 
--- | The same as 'convexSpearations', but accepting a separation hint
--- to start searching from.
-persistentConvexSeparations
-    :: Vector V2   -- ^ The vertices of the first polygon (vs1)
-    -> Vector V2   -- ^ The vertices of the second polygon (vs2)
-    -> Separation  -- ^ Separation hint (e.g. previous output)
-    -> (Float, Float, [(Separation, (V2, V2))])
-persistentConvexSeparations vs1 vs2 s0 =
-    case sepcmp (separation start) (separation start') of
-        LT -> closestPairs stepBackwards start
-        GT -> closestPairs stepForward start'
-        EQ -> case sepcmp (separation (stepBackwards start)) (separation (stepForward start')) of
-            LT -> closestPairs stepBackwards start'
-            _  -> closestPairs stepForward start
+-- | A 5-tuple @(d2,ds,sep,v1,v2)@ that provides distance information
+-- on two convex polygons, where @d2@ is the square of the distance,
+-- @ds@ is its sign (negative in case of penetration), @sep@ describes
+-- the opposing features, while @v1@ and @v2@ are the absolute
+-- coordinates of the deepest points within the opposite polygon.
+convexSeparations
+    :: Vector V2  -- ^ The vertices of the first polygon (vs1)
+    -> Vector V2  -- ^ The vertices of the second polygon (vs2)
+    -> (Float, Float, Separation, V2, V2)
+convexSeparations vs1 vs2 =
+    closestPairs (until validSeparation stepBackwards (GT,0,0))
   where
     l1 = V.length vs1
     l2 = V.length vs2
@@ -250,35 +247,17 @@ persistentConvexSeparations vs1 vs2 s0 =
     pred1 n = if n == 0 then l1-1 else pred n
     pred2 n = if n == 0 then l2-1 else pred n
 
-    sepcmp = comparing fst
-
-{-
-    closestPairs step s = go (step s) [(s,v12)] dst
+    -- Exhaustive search for the closest feature pair(s)
+    closestPairs s = go (l1+l2-1) (stepBackwards s) (s,v12) dst
       where
         (dst,v12) = separation s
-        go s mins dst@(sd,sgd) = case compare dst dst' of
-            LT -> (sd,-sgd,mins)
-            EQ -> go (step s) ((s,v12):mins) dst
-            GT -> go (step s) [(s,v12)] dst'
-          where
-            (dst',v12) = separation s
--}
-
-    -- TODO: avoid exhaustive search
-    closestPairs step s = go (l1+l2-1) (step s) [(s,v12)] dst
-      where
-        (dst,v12) = separation s
-        go 0 _ mins dst@(sd,sgd) = (sd,-sgd,mins)
-        go n s mins dst@(sd,sgd) = case compare dst dst' of
-            LT -> go n' (step s) mins dst
-            EQ -> go n' (step s) ((s,v12):mins) dst
-            GT -> go n' (step s) [(s,v12)] dst'
+        go 0 _ (s,(v1,v2)) (sd,sgd) = (sd,-sgd,s,v1,v2)
+        go n s sep dst
+            | dst < dst' = go n' (stepBackwards s) sep dst
+            | otherwise  = go n' (stepBackwards s) (s,v12) dst'
           where
             (dst',v12) = separation s
             n' = n-1
-
-    start' = stepForward start
-    start = until validSeparation stepForward s0
 
     -- Step towards the next feature pair counter-clockwise
     stepForward (rel,i1,i2) = case rel of
@@ -319,12 +298,14 @@ persistentConvexSeparations vs1 vs2 s0 =
         e22 = v2 - vs2 ! succ2 i2
 
     -- Distance information for a given feature pair
-    separation (sep,i1,i2) = case sep of
-        LT -> s v2 v2' e2 sd2 v1 False
-        GT -> s v1 v1' e1 sd1 v2 True
-        EQ | sd1 > sd2 -> min (s v1 v1' e1 sd1 v2 True) (s v1 v1' e1 sd1 v2' True)
-           | otherwise -> min (s v2 v2' e2 sd2 v1 False) (s v2 v2' e2 sd2 v1' False)
+    separation (rel,i1,i2) = case rel of
+        LT -> swap (s v2 v2' e2 sd2 v1)
+        GT -> s v1 v1' e1 sd1 v2
+        EQ | sd1 > sd2 -> min (s v1 v1' e1 sd1 v2) (s v1 v1' e1 sd1 v2')
+           | otherwise -> swap (min (s v2 v2' e2 sd2 v1) (s v2 v2' e2 sd2 v1'))
       where
+        swap (d,(v1,v2)) = (d,(v2,v1))
+
         v1 = vs1 ! i1
         v2 = vs2 ! i2
         v1' = vs1 ! succ1 i1
@@ -334,27 +315,15 @@ persistentConvexSeparations vs1 vs2 s0 =
         sd1 = square e1
         sd2 = square e2
 
-        -- The squared distance of the v1 to v2 segment and the v3 vertex.
-        s v1 v2 v12 sd12 v3 b = ((sd,signum cp),if b then (v,v3) else (v3,v))
+        -- The squared distance of the v1 to v2 segment and the v3 vertex
+        s v1 v2 e12 sd12 v3 = ((sd,signum cp),(v,v3))
           where
-            --v12 = v2-v1
-            v13 = v3-v1
-            v23 = v3-v2
-            --sd12 = square v12
+            e13 = v3-v1
+            e23 = v3-v2
             sd12' = recip sd12
-            dp = v12 `dot` v13
+            dp = e12 `dot` e13
             -- negative: separation, positive: penetration
-            cp = v12 `cross` v13
-            (v,sd) | dp <= 0    = (v1,square v13)
-                   | dp >= sd12 = (v2,square v23)
-                   | otherwise  = (v1+v12*.(dp*sd12'),cp*cp*sd12')
-
--- | A triple @(d2,ds,fs)@ that describes the closest opposing
--- features of two convex polygons, where @d2@ is the square of the
--- distance, @ds@ is its sign (negative in case of penetration), and
--- @fs@ is the list describing the feature pairs with this
--- distance. Each element of @fs@ is a tuple @(sep,v1,v2)@ where @sep@
--- describes the opposing features, while, @v1@ and @v2@ are the
--- absolute coordinates of the separation points.
-convexSeparations :: Vector V2 -> Vector V2 -> (Float, Float, [(Separation, (V2, V2))])
-convexSeparations vs1 vs2 = persistentConvexSeparations vs1 vs2 (GT,0,0)
+            cp = e12 `cross` e13
+            (v,sd) | dp <= 0    = (v1,square e13)
+                   | dp >= sd12 = (v2,square e23)
+                   | otherwise  = (v1+e12*.(dp*sd12'),cp*cp*sd12')

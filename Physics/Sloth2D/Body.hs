@@ -1,8 +1,5 @@
 module Physics.Sloth2D.Body where
 
-import Data.List
-import Data.Maybe
-import Data.Monoid
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
@@ -18,6 +15,7 @@ data DynamicState = Dyn
 data Body = Body
     { shape :: Shape
     , masses :: (Float, Float, Float, Float)  -- mass, 1/mass, moment, 1/moment
+    , elasticity :: Float
     , curState :: DynamicState
     , curGeometry :: Vector V2
     , prevState :: DynamicState
@@ -34,6 +32,7 @@ fromShape :: Shape -> Body
 fromShape shape = Body
     { shape = shape
     , masses = (0,0,0,0)
+    , elasticity = 1
     , curState = st
     , curGeometry = vs
     , prevState = st
@@ -50,6 +49,9 @@ body `withMass` mass = body { masses = (m,m',am,am') }
     (m',am) = if m == 0 then (0,0)
               else (recip m, m * momentOfInertia (shape body))
     am' = if am == 0 then 0 else recip am
+
+withElasticity :: Body -> Float -> Body
+body `withElasticity` eps = body { elasticity = max 0 (min 1 eps) }
 
 withState :: Body -> DynamicState -> Body
 body `withState` st@(Dyn p _ a _) =
@@ -140,21 +142,23 @@ angularVelocity t Body { curState = Dyn _ _ _ w, prevState = Dyn _ _ _ w' } = w*
 transformation :: Float -> Body -> T2
 transformation t body = transRot (position t body) (orientation t body)
 
+-- Response per body: change in position, velocity and angular velocity.
 collisionResponse :: Float -> Body -> Body -> Maybe (V2, V2, Float, V2, V2, Float)
-collisionResponse eps b1 b2 = if null imps then Nothing
-                              else Just (mulMasses (foldl' addImp nullImp imps))
+collisionResponse eps b1 b2 = if noPossibleCollision then Nothing else impulse
   where
-    Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 a1 w1, curGeometry = vs1 } = b1
-    Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 a2 w2, curGeometry = vs2 } = b2
+    Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 _ w1, curGeometry = vs1, elasticity = eps1 } = b1
+    Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 _ w2, curGeometry = vs2, elasticity = eps2 } = b2
     m12' = m1'+m2'
     m12'' = recip m12'
-    tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^2
-    (d2,ds,fs) = convexSeparations vs1 vs2
-    imps = if tooFar || ds > 0 || (m1' == 0 && m2' == 0) then []
-           else [mkImp r1 r2 | (_,(r1,r2)) <- fs]
-    mkImp r1 r2
-        | d < 0     = Left n
-        | otherwise = Right (n,j,ta,tb)
+
+    noPossibleCollision = tooFar || ds > 0 || (m1' == 0 && m2' == 0)
+    tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^(2 :: Int)
+    (_,ds,_,r1,r2) = convexSeparations vs1 vs2
+
+    impulse
+        | d < 0              = Just (-n*.(m1'*m12''),V 0 0,0,n*.(m2'*m12''),V 0 0,0)
+        | square n < 0.00001 = Nothing
+        | otherwise          = Just (V 0 0,-n*.(j*m1'),-ta*j*i1',V 0 0, n*.(j*m2'),tb*j*i2')
       where
         n = r1-r2
         ra = r1-p1
@@ -163,14 +167,7 @@ collisionResponse eps b1 b2 = if null imps then Nothing
         d = vab `dot` n
         ta = ra `cross` n
         tb = rb `cross` n
-        j = (1+eps)*d/(m12'*square n+i1'*ta*ta+i2'*tb*tb)
-    nullImp = (V 0 0, V 0 0, 0, 0, 0)
-    addImp (n,dp,j,ta,tb) (Left n') = (n+n',dp+n',j,ta,tb)
-    addImp (n,dp,j,ta,tb) (Right (n',j',ta',tb')) = (n+n',dp,j+j',ta+ta',tb+tb')
-    fsl = recip (fromIntegral (length imps))
-    fsl' = -fsl
-    mulMasses (n,dp,j,ta,tb) = (dp*.(m1'*m12''*fsl'),n*.(j*m1'*fsl'),ta*j*i1'*fsl'
-                               ,dp*.(m2'*m12''*fsl ),n*.(j*m2'*fsl ),tb*j*i2'*fsl)
+        j = (1+eps*eps1*eps2)*d/(m12'*square n+i1'*ta*ta+i2'*tb*tb)
 
 transRot :: V2 -> Angle -> T2
 transRot v a = rotate a `withTranslation` v

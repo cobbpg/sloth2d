@@ -18,14 +18,14 @@ import Physics.Sloth2D.Stepper
 import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 
-(world, _) = addBodies (dynamicWorld (1/60) 0.2) $
+(world, _) = addBodies (dynamicWorld (1/60) 0.2 (V 0 (-8))) $ map (`withElasticity` 0.1) $
     [ fromShape (regularShape 3 10) `withPosition` (V 12 0, 0)
     , fromShape (regularShape 3 10) `withPosition` (V (-12) 0, pi)
     , fromShape (regularShape 3 10) `withPosition` (V 0 10, pi*0.5)
     , fromShape (regularShape 3 10) `withPosition` (V 0 (-10), pi*1.5)
     , fromShape (regularShape 4 1) `withMass` 1 `withPosition` (V 0.5 0, 0) `withVelocity` (V 3 1, 0)
     , fromShape (regularShape 5 1) `withMass` 2 `withPosition` (V (-2) 0, pi/8) `withVelocity` (V 2 3, 0)
-    , fromShape (regularShape 6 2) `withMass` 20 `withPosition` (V 2 (-1), 0) `withVelocity` (V 4 0, 1)
+    , fromShape (regularShape 6 2) `withMass` 30 `withPosition` (V 2 (-1), 0) `withVelocity` (V 4 0, 1)
     ]
     ++
     [fromShape (regularShape (i `div` 3+3) 0.4) `withMass` 0.3 `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(1.5), 0) |

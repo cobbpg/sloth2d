@@ -26,4 +26,4 @@ Library
     Physics.Sloth2D.Vector2D
 
   Build-depends:     base >= 4, containers, vector, vector-algorithms
-  Ghc-options:       -Wall -O2
+  Ghc-options:       -Wall -O2 -fno-warn-name-shadowing
