@@ -14,20 +14,18 @@ Features
 Sore spots
 ==========
 
-* naive collision resolution
+* extremely naive collision resolution
 
 Planned features
 ================
 
-* concave colliders
-* round colliders
-* plane colliders
+* other collider shapes: concave, round, half-plane, hierarchical
 * collision layers
-* spatial hashing
+* spatial hashing for more efficient collision detection
 * object deactivation
+* support for raycasting
 * serialisation of physics state
 * combinators on dynamic worlds
-* hierarchical objects
 * constraints
 * friction
 * stacking

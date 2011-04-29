@@ -232,13 +232,21 @@ triangulation vs = [tri | ms <- monotoneDecomposition vs, tri <- monotoneTriangu
 -- on two convex polygons, where @d2@ is the square of the distance,
 -- @ds@ is its sign (negative in case of penetration), @sep@ describes
 -- the opposing features, while @v1@ and @v2@ are the absolute
--- coordinates of the deepest points within the opposite polygon.
-convexSeparations
+-- coordinates of the deepest points within the opposite polygon.  If
+-- the third parameter is @True@, only negative distances are
+-- reported, and the function yields @Nothing@ for non-overlapping
+-- polygons.  This is more efficient if we are only interested in
+-- collisions, since the computation can be cancelled upon finding the
+-- first separating axis.  If the third parameter is @False@, the
+-- result cannot be @Nothing@.
+convexSeparation
     :: Vector V2  -- ^ The vertices of the first polygon (vs1)
     -> Vector V2  -- ^ The vertices of the second polygon (vs2)
-    -> (Float, Float, Separation, V2, V2)
-convexSeparations vs1 vs2 =
-    closestPairs (until validSeparation stepBackwards (GT,0,0))
+    -> Bool       -- ^ Whether we are only interested in overlapping
+    -> Maybe (Float, Float, Separation, V2, V2)
+convexSeparation vs1 vs2 onlyCollision
+    | onlyCollision = closestPenetratingPair firstValidPair
+    | otherwise     = Just (closestPair firstValidPair)
   where
     l1 = V.length vs1
     l2 = V.length vs2
@@ -247,8 +255,10 @@ convexSeparations vs1 vs2 =
     pred1 n = if n == 0 then l1-1 else pred n
     pred2 n = if n == 0 then l2-1 else pred n
 
-    -- Exhaustive search for the closest feature pair(s)
-    closestPairs s = go (l1+l2-1) (stepBackwards s) (s,v12) dst
+    firstValidPair = until validSeparation stepBackwards (GT,0,0)
+
+    -- Exhaustive search for the closest feature pair
+    closestPair s = go (l1+l2-1) (stepBackwards s) (s,v12) dst
       where
         (dst,v12) = separation s
         go 0 _ (s,(v1,v2)) (sd,sgd) = (sd,-sgd,s,v1,v2)
@@ -259,6 +269,19 @@ convexSeparations vs1 vs2 =
             (dst',v12) = separation s
             n' = n-1
 
+    -- Exhaustive search for the closest penetrating feature pair
+    closestPenetratingPair s = go (l1+l2-1) (stepBackwards s) (s,v12) dst
+      where
+        (dst,v12) = separation s
+        go 0 _ (s,(v1,v2)) (sd,sgd) = Just (sd,-sgd,s,v1,v2)
+        go n s sep dst@(_,sg)
+            | sg < 0     = Nothing
+            | dst < dst' = go n' (stepBackwards s) sep dst
+            | otherwise  = go n' (stepBackwards s) (s,v12) dst'
+          where
+            (dst',v12) = separation s
+            n' = n-1
+{-
     -- Step towards the next feature pair counter-clockwise
     stepForward (rel,i1,i2) = case rel of
         LT -> (turn e1  e2',i1 ,i2')
@@ -271,7 +294,7 @@ convexSeparations vs1 vs2 =
         e2 = vs2 ! i2 - vs2 ! i2'
         e1' = vs1 ! succ1 i1' - vs1 ! i1'
         e2' = vs2 ! i2' - vs2 ! succ2 i2'
-
+-}
     -- Step towards the next feature pair clockwise
     stepBackwards (_,i1,i2) = case turn e2 e1 of
         LT -> (LT,i1 ,i2')

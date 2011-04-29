@@ -144,18 +144,18 @@ transformation t body = transRot (position t body) (orientation t body)
 
 -- Response per body: change in position, velocity and angular velocity.
 collisionResponse :: Float -> Body -> Body -> Maybe (V2, V2, Float, V2, V2, Float)
-collisionResponse eps b1 b2 = if noPossibleCollision then Nothing else impulse
+collisionResponse eps b1 b2 = if noPossibleCollision then Nothing else impulse =<< separation
   where
     Body { masses = (_,m1',_,i1'), curState = Dyn p1 v1 _ w1, curGeometry = vs1, elasticity = eps1 } = b1
     Body { masses = (_,m2',_,i2'), curState = Dyn p2 v2 _ w2, curGeometry = vs2, elasticity = eps2 } = b2
     m12' = m1'+m2'
     m12'' = recip m12'
 
-    noPossibleCollision = tooFar || ds > 0 || (m1' == 0 && m2' == 0)
+    separation = convexSeparation vs1 vs2 True
+    noPossibleCollision = tooFar || (m1' == 0 && m2' == 0)
     tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^(2 :: Int)
-    (_,ds,_,r1,r2) = convexSeparations vs1 vs2
 
-    impulse
+    impulse (_,ds,_,r1,r2)
         | d < 0              = Just (-n*.(m1'*m12''),V 0 0,0,n*.(m2'*m12''),V 0 0,0)
         | square n < 0.00001 = Nothing
         | otherwise          = Just (V 0 0,-n*.(j*m1'),-ta*j*i1',V 0 0, n*.(j*m2'),tb*j*i2')

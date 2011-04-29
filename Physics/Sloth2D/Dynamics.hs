@@ -42,20 +42,24 @@ world `advancedBy` dt = world
     , bodies = foldl' newBodies (bodies world) (replicate n sdt)
     }
   where
+    iterations = 10
     (n,m') = advance dt (manager world)
     sdt = timeStep m'
     newBodies bodies dt = M.fromList $
-                          zip (M.keys bodies) (V.toList (V.map (integrate dt) (iterate resolve bs !! 3)))
+                          zip (M.keys bodies) (V.toList (V.map (integrate dt) (resolveCollisions iterations bs)))
       where
         bs = addGravity (gravity world *. dt) (V.map shiftBody (V.fromList (M.elems bodies)))
         addGravity g bs = if g /= V 0 0 then V.map addG bs else bs
           where
             addG b = if mass b == 0 then b else b `nudgedBy` (g,0)
 
-        num = V.length bs - 1
-        resolve bs = V.accum addImpact bs [r | i1 <- [0..num], i2 <- [i1+1..num], r <- check i1 i2]
+        resolveCollisions n bs
+            | n < 1     = bs
+            | otherwise = resolveCollisions (n-1) (resolve (n/iterations) bs)
+        resolve eps bs = V.accum addImpact bs [r | i1 <- [0..num], i2 <- [i1+1..num], r <- check i1 i2]
           where
+            num = V.length bs - 1
             addImpact body (p,v,w) = body `nudgedBy` (v,w) `movedBy` (p*.0.6,0)
-            check i1 i2 = case collisionResponse 1 (bs ! i1) (bs ! i2) of
+            check i1 i2 = case collisionResponse eps (bs ! i1) (bs ! i2) of
                 Nothing -> []
                 Just (p1,v1,w1,p2,v2,w2) -> [(i1,(p1,v1,w1)),(i2,(p2,v2,w2))]

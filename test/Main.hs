@@ -18,7 +18,7 @@ import Physics.Sloth2D.Stepper
 import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 
-(world, _) = addBodies (dynamicWorld (1/60) 0.2 (V 0 (-8))) $ map (`withElasticity` 0.1) $
+(world, _) = addBodies (dynamicWorld (1/50) 0.2 (V 0 (-8))) $ map (`withElasticity` 0.1) $
     [ fromShape (regularShape 3 10) `withPosition` (V 12 0, 0)
     , fromShape (regularShape 3 10) `withPosition` (V (-12) 0, pi)
     , fromShape (regularShape 3 10) `withPosition` (V 0 10, pi*0.5)
