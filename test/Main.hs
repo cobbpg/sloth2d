@@ -1,3 +1,5 @@
+{-# LANGUAGE PackageImports #-}
+
 import Control.Monad
 import Control.Monad.Fix
 import Data.IORef
@@ -6,7 +8,7 @@ import Data.List
 import Data.Maybe
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as V
-import Graphics.UI.GLFW
+import "GLFW" Graphics.UI.GLFW
 import Graphics.Rendering.OpenGL as GL hiding (position)
 import System.IO
 
@@ -18,18 +20,22 @@ import Physics.Sloth2D.Stepper
 import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 
-(world, _) = addBodies (dynamicWorld (1/50) 0.2 (V 0 (-8))) $ map (`withElasticity` 0.1) $
+(world, _) = addBodies (dynamicWorld (1/50) 0.2 (V 0 (-8)) `withCollisionRelation` rel) $ map (`withElasticity` 0.1) $
     [ fromShape (regularShape 3 10) `withPosition` (V 12 0, 0)
     , fromShape (regularShape 3 10) `withPosition` (V (-12) 0, pi)
     , fromShape (regularShape 3 10) `withPosition` (V 0 10, pi*0.5)
     , fromShape (regularShape 3 10) `withPosition` (V 0 (-10), pi*1.5)
     , fromShape (regularShape 4 1) `withMass` 1 `withPosition` (V 0.5 0, 0) `withVelocity` (V 3 1, 0)
-    , fromShape (regularShape 5 1) `withMass` 2 `withPosition` (V (-2) 0, pi/8) `withVelocity` (V 2 3, 0)
-    , fromShape (regularShape 6 2) `withMass` 30 `withPosition` (V 2 (-1), 0) `withVelocity` (V 4 0, 1)
+    , fromShape (regularShape 5 1) `withCollisionLayer` 1 `withMass` 2 `withPosition` (V (-2) 0, pi/8) `withVelocity` (V 2 3, 0)
+    , fromShape (regularShape 6 2) `withCollisionLayer` 2 `withMass` 30 `withPosition` (V 2 (-1), 0) `withVelocity` (V 4 0, 1)
     ]
     ++
-    [fromShape (regularShape (i `div` 3+3) 0.4) `withMass` 0.3 `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(1.5), 0) |
+    [fromShape (regularShape (i `div` 3+3) 0.4)
+     `withCollisionLayer` (i `mod` 3) `withMass` 0.3
+     `withPosition` (unit a*.4, 0) `withVelocity` (unit a*.(1.5), 0) |
      i <- [0..19], let a = pi*fromIntegral i/10]
+  where
+    rel l1 l2 = l1 == 0 || l2 == 0 || l1 == l2
 
 main = do
     initialize
@@ -83,12 +89,16 @@ render dt bodies lists = do
     loadIdentity
     GL.scale magn magn (1 :: GLfloat)
 
-    color $ Color4 1 1 1 (0.5 :: GLfloat)
     forM_ (zip bodies lists) $ \(body,list) -> preservingMatrix $ do
         let V x y = position dt body
             a = orientation dt body
+            col = case layer body of
+                1 -> Color4 1 0 0 (0.5 :: GLfloat)
+                2 -> Color4 0 1 0 (0.5 :: GLfloat)
+                _ -> Color4 1 1 1 (0.5 :: GLfloat)
         GL.translate $ Vector3 (realToFrac x) (realToFrac y) (0 :: GLfloat)
         GL.rotate (realToFrac (a*180/pi) :: GLfloat) $ Vector3 0 0 1
+        color col
         callList list
 {-
     forM_ [(b,b') | (b:bs) <- tails bodies, b' <- bs] $ \(b1,b2) -> do

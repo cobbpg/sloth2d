@@ -10,10 +10,13 @@ import Physics.Sloth2D.Body
 import Physics.Sloth2D.Stepper
 import Physics.Sloth2D.Vector2D
 
+type CollisionRelation = CollisionLayer -> CollisionLayer -> Bool
+
 data Dynamics = Dynamics
     { manager :: Stepper
     , bodies :: IntMap Body
     , gravity :: V2
+    , collisionRelation :: CollisionRelation
     , nextId :: Int
     }
 
@@ -22,6 +25,7 @@ dynamicWorld tstep dtmax grav = Dynamics
     { manager = stepper tstep dtmax
     , bodies = M.empty
     , gravity = grav
+    , collisionRelation = \_ _ -> True
     , nextId = 0
     }
 
@@ -35,6 +39,17 @@ addBodies world newBodies =
       where
         i' = i+1
         m' = M.insert i e m
+
+withCollisionRelation :: Dynamics -> CollisionRelation -> Dynamics
+world `withCollisionRelation` rel = world { collisionRelation = rel }
+
+collisionPairs :: [(CollisionLayer, CollisionLayer)] -> CollisionRelation
+collisionPairs [] = \_ _ -> False
+collisionPairs pairs = rel
+  where
+    rel l1 l2 = l1 >= 0 && l1 <= vmax && l2 >= 0 && l2 <= vmax && v ! (l1*(vmax+1)+l2)
+    vmax = maximum (concatMap (\(x,y) -> [x,y]) pairs)
+    v = V.fromList [(x,y) `elem` pairs || (y,x) `elem` pairs | x <- [0..vmax], y <- [0..vmax]]
 
 advancedBy :: Dynamics -> Float -> Dynamics
 world `advancedBy` dt = world
@@ -53,6 +68,7 @@ world `advancedBy` dt = world
           where
             addG b = if mass b == 0 then b else b `nudgedBy` (g,0)
 
+        colrel = collisionRelation world
         resolveCollisions n bs
             | n < 1     = bs
             | otherwise = resolveCollisions (n-1) (resolve (n/iterations) bs)
@@ -60,6 +76,11 @@ world `advancedBy` dt = world
           where
             num = V.length bs - 1
             addImpact body (p,v,w) = body `nudgedBy` (v,w) `movedBy` (p*.0.6,0)
-            check i1 i2 = case collisionResponse eps (bs ! i1) (bs ! i2) of
-                Nothing -> []
-                Just (p1,v1,w1,p2,v2,w2) -> [(i1,(p1,v1,w1)),(i2,(p2,v2,w2))]
+            check i1 i2 = if colrel (layer b1) (layer b2) then
+                              case collisionResponse eps b1 b2 of
+                                  Nothing -> []
+                                  Just (p1,v1,w1,p2,v2,w2) -> [(i1,(p1,v1,w1)),(i2,(p2,v2,w2))]
+                          else []
+              where
+                b1 = bs ! i1
+                b2 = bs ! i2

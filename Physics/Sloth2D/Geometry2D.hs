@@ -163,12 +163,15 @@ monotoneDecomposition vs = (map getIndices . snd) (V.foldl' addVertex ([], []) s
               in (mss' ++ ms':mss'', out)
       where
         isConnected ((vl:_), (vr:_)) = idx v == next vl || idx v == prev vr
+        isConnected _ = error "isConnected"
+
         isContained ((vl:_), (vr:_)) = px v > xl && px v <= xr
           where
             vl' = cvs ! (next vl)
             vr' = cvs ! (prev vr)
             xl = px vl + (px vl' - px vl) * (py v - py vl) / (py vl' - py vl)
             xr = px vr + (px vr' - px vr) * (py v - py vr) / (py vr' - py vr)
+        isContained _ = error "isContained"
 
     scvs = V.modify (V.sortBy (comparing py)) cvs
     cvs = V.imap classify ovs
@@ -213,6 +216,8 @@ monotoneTriangulation vs (msl,msr) = snd (foldl' addVertex ([si2,si1],[]) sis)
             v0 = vs ! i0
             v1 = vs ! i1
             v2 = vs ! i'
+
+    addVertex _ _ = error "addVertex"
 
     si1:si2:sis = merge msl (init (tail msr))
     merge [] irs = map ((,) True) irs

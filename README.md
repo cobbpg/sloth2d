@@ -10,6 +10,7 @@ Features
 * 100% pure implementation
 * deterministic simulation (replayable regardless of sampling rate)
 * convex colliders
+* collision layers
 
 Sore spots
 ----------
@@ -20,7 +21,6 @@ Planned features
 ----------------
 
 * other collider shapes: concave, round, half-plane
-* collision layers
 * spatial hashing for more efficient collision detection
 * object deactivation
 * support for raycasting

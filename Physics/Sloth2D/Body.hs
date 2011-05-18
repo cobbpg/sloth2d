@@ -7,6 +7,8 @@ import Physics.Sloth2D.Geometry2D
 import Physics.Sloth2D.Vector2D
 import Physics.Sloth2D.Shape
 
+type CollisionLayer = Int
+
 data DynamicState = Dyn
     {-# UNPACK #-} !V2 {-# UNPACK #-} !V2        -- position, velocity
     {-# UNPACK #-} !Angle {-# UNPACK #-} !Float  -- orientation, angular velocity
@@ -16,6 +18,7 @@ data Body = Body
     { shape :: Shape
     , masses :: (Float, Float, Float, Float)  -- mass, 1/mass, moment, 1/moment
     , elasticity :: Float
+    , layer :: CollisionLayer
     , curState :: DynamicState
     , curGeometry :: Vector V2
     , prevState :: DynamicState
@@ -33,6 +36,7 @@ fromShape shape = Body
     { shape = shape
     , masses = (0,0,0,0)
     , elasticity = 1
+    , layer = 0
     , curState = st
     , curGeometry = vs
     , prevState = st
@@ -73,6 +77,9 @@ body `withShape` shape =
     fromShape shape
     `withMass` mass body
     `withState` curState body
+
+withCollisionLayer :: Body -> CollisionLayer -> Body
+body `withCollisionLayer` layer = body { layer = layer }
 
 movedBy :: Body -> (V2, Angle) -> Body
 body@Body { curState = Dyn p v a w } `movedBy` (p',a') =
@@ -155,7 +162,7 @@ collisionResponse eps b1 b2 = if noPossibleCollision then Nothing else impulse =
     noPossibleCollision = tooFar || (m1' == 0 && m2' == 0)
     tooFar = square (p1-p2) > (maxRadius (shape b1)+maxRadius (shape b2))^(2 :: Int)
 
-    impulse (_,ds,_,r1,r2)
+    impulse (_,_,_,r1,r2)
         | d < 0              = Just (-n*.(m1'*m12''),V 0 0,0,n*.(m2'*m12''),V 0 0,0)
         | square n < 0.00001 = Nothing
         | otherwise          = Just (V 0 0,-n*.(j*m1'),-ta*j*i1',V 0 0, n*.(j*m2'),tb*j*i2')
