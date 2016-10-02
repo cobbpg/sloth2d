@@ -62,7 +62,7 @@ body `withState` st@(Dyn p _ a _) =
     body { curState = st, curGeometry = vs }
   where
     t = transRot p a
-    vs = V.map (t <>) (vertices (shape body))
+    vs = V.map (t *^) (vertices (shape body))
 
 withPosition :: Body -> (V2, Angle) -> Body
 body@Body { curState = Dyn _ v _ w } `withPosition` (p,a) =

@@ -5,7 +5,7 @@ module Physics.Sloth2D.Vector2D
     , unit, (*.), dot, cross, perpL, perpR
     , turn, turnL, turnNL, turnR, turnNR, parv
     , square, mag, norm, dir
-    , inverse, (<>)
+    , inverse, (*^)
     , translate, rotate, scale
     , translationOf, rotationOf, scaleOf
     , withTranslation, withRotation, withScale
@@ -126,8 +126,8 @@ inverse (T rx ry tx ty) = T (rx*m) (-ry*m) tx' ty'
     ty' = m*(ry*tx-rx*ty)
 
 -- | Transformation applied to a vector.
-(<>) :: T2 -> V2 -> V2
-T rx ry tx ty <> V x y = V x' y'
+(*^) :: T2 -> V2 -> V2
+T rx ry tx ty *^ V x y = V x' y'
   where
     x' = rx*x-ry*y+tx
     y' = ry*x+rx*y+ty
