@@ -11,7 +11,7 @@ module Physics.Sloth2D.Vector2D
     , withTranslation, withRotation, withScale
     ) where
 
-import Data.Monoid
+import Data.Monoid ( Monoid(mappend, mempty) )
 
 infixl 7 `dot`, `cross`
 infixl 5 `turn`, `turnL`, `turnNL`, `turnR`, `turnNR`, `parv`
